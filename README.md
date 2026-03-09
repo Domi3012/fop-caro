@@ -1,7 +1,7 @@
-# Giới thiệu
-* Một game caro được viết theo hướng thủ tục thuần bằng C/C++.
+# 0. Giới thiệu
+* Một game caro được viết theo hướng thủ tục thuần bằng C/C++, sử dụng thư viện Raylib.
 
-# Thông tin đồ án.
+# 1. Thông tin đồ án.
 * Môn học:   
 * Lớp:  
 * Giảng viên hướng dẫn: Thầy 3T  
@@ -9,37 +9,36 @@
 * Danh sách thành viên:  
 
 
-# Clone code & Build
-Mấy anh iu clone về nhớ để ý nha
+# 2. Clone code & Build
+* Mấy anh iu clone về nhớ để ý nha
 
-## Clone
-Vì có sử dụng thư viện ngoài (Raylib) quản lý bằng git submodule  
-Khi clone nhớ thêm cờ `--recursive`
+## 2.1. Clone
+* Vì có sử dụng thư viện ngoài (Raylib) quản lý bằng git submodule nên khi clone nhớ thêm cờ `--recursive`
 
 ```bash
-git clone --recursive <thay_link_github_cua_ban_vao_day>
+git clone --recursive <link-github-project>
 ```
 
-Nếu lỡ `git clone` hay `git pull` thường thì chạy thêm
+* Nếu lỡ `git clone` hay `git pull` thường thì chạy thêm
 ```bash
 git submodule update --init --recursive
 ```
 
-## Build & Chạy
+## 2.2. Build
 * Tất cả thực thi tại thư mục gốc
 
-### Tạo cấu hình CMake
+### 2.2.1. Tạo cấu hình CMake
 * Chỉ chạy lệnh này vào lần đầu tiên hoặc sau khi thêm file `.cpp` mới vào `./src/`
 ```bash
 cmake -S . -B build
 ```
 
-### Build
+### 2.2.2. Build
 ```bash
 cmake --build build
 ```
 
-### Run
+## 2.3. Run
 * Trên Unix:
 ```bash
 ./build/GameCaro
