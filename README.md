@@ -12,6 +12,12 @@
 # 2. Clone code & Build
 * Mấy anh iu clone về nhớ để ý nha
 
+## 2.0. Yêu cầu
+* Cho Windows: Cài một trong hai  
+  * Visual Studio Build Tools (recommend) - cái này ae nào cài Visual Studio rồi thì nó có sẵn rồi  
+  * MinGW-w64
+* CMake 
+
 ## 2.1. Clone
 * Vì có sử dụng thư viện ngoài (Raylib) quản lý bằng git submodule nên khi clone nhớ thêm cờ `--recursive`
 
@@ -31,6 +37,11 @@ git submodule update --init --recursive
 * Chỉ chạy lệnh này vào lần đầu tiên hoặc sau khi thêm file `.cpp` mới vào `./src/`
 ```bash
 cmake -S . -B build
+```
+
+* Nếu build bằng MinGW
+```bash
+cmake -S . -B build -G "MinGW Makefiles"
 ```
 
 ### 2.2.2. Build
