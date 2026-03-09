@@ -1,0 +1,27 @@
+# IDE & CMake Directories
+.vscode/
+bin/
+build/
+.cache/
+out/
+
+# Compiled Object files & Executables (nếu lỡ build thủ công)
+*.o
+*.out
+*.exe
+*.dll
+*.so
+*.dylib
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# --- CỤC BỘ DỰ ÁN CARO ---
+# Bỏ qua các file save game do người dùng tạo ra khi test
+# (Giả sử bạn gom file save vào thư mục này và dùng đuôi .txt hoặc .sav)
+assets/saves/*.txt
+assets/saves/*.sav
+
+# (Tùy chọn) Giữ lại cấu trúc thư mục saves trống trên Git
+!assets/saves/.gitkeep
