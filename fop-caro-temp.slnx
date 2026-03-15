@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="fop-caro-temp.vcxproj" Id="0a1b2f23-8fbb-4963-90e5-9917b874ace9" />
+</Solution>
