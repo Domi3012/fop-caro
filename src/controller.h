@@ -26,32 +26,31 @@ struct UIState {
 	int cursorY;
 };
 
-// --- CÁC HÀM XỬ LÝ (CHỨC NĂNG CỦA CONTROLLER) ---
+// CÁC HÀM XỬ LÝ (CHỨC NĂNG CỦA CONTROLLER)
 
-// 1. Hàm điều phối chính (Gọi trong main loop)
-void handleInput(MatchState& match, UIState& ui); // Lắng nghe các nút bấm và xử lí gọi dữ liệu và gọi các hàm bên dưới
-
-// 2. Các hàm xử lý riêng cho từng màn hình
-void updateMenu(UIState& ui);
-void updateCharSelection(MatchState& match, UIState& ui);
-void updateGameplay(MatchState& match, UIState& ui);
-
-
-// ví dụ: cho GAME_BOARD, hàm sẽ lắng nghe các nút di chuyển con trỏ (WASD) và nút xác nhận (Enter),
-// sau đó gọi checkValidMove và makeMove nếu hợp lệ, rồi gọi checkRoundResult để cập nhật kết
-// quả vòng đấu. 
+void handleMainMenuInput(UIState& ui); // Lên xuống để chọn, enter để xác nhận (chỉ có 1 option thôi nhưng vẫn làm cho nó đúng quy trình)
+void handleCharSelectionInput(MatchState& match, UIState& ui); // Lên xuống để chọn nhân vật, enter để xác nhận, sau khi chọn xong cho X thì chuyển sang chọn O, sau khi chọn xong cho O thì chuyển state sang GAME_BOARD
+void handleGameplayInput(MatchState& match, UIState& ui); // lên xuống trái phải để di chuyển, enter để chơi
+void handleRoundOverInput(MatchState& match, UIState& ui); // Làm đơn giản: Nhấn bất kì để tiếp tục, sau đó chuyển state
+void handleGameOverInput(MatchState& match, UIState& ui); // Nhất enter để quay lại main menu, hoặc esc để thoát game
 
 void handleInput(MatchState& match, UIState& ui) {
-	switch (ui.currentScreen) {
-	case GAME_BOARD:
-		if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) ui.cursorX++ % BOARD_SIZE;
-		if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) ui.cursorX++ % BOARD_SIZE;
-
-
-
-		updateGameplay(match, ui);
-		break;
-	default:
-		break;
-	}
+    switch (ui.currentScreen) {
+    case MAIN_MENU:
+        handleMainMenuInput(ui); // Giao cho thằng A làm
+        break;
+    case CHARACTER_SELECTION:
+        handleCharSelectionInput(match, ui); // Giao cho thằng B làm
+        break;
+    case GAME_BOARD:
+        handleGameplayInput(match, ui); // Bạn làm (logic lõi)
+        break;
+    case ROUND_OVER:
+        handleRoundOverInput(match, ui);
+        break;
+    case GAME_OVER:
+        handleGameOverInput(match, ui);
+        break;
+    }
 }
+
