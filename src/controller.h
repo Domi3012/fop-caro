@@ -34,16 +34,20 @@ void handleGameplayInput(MatchState& match, UIState& ui); // lên xuống trái 
 void handleRoundOverInput(MatchState& match, UIState& ui); // Làm đơn giản: Nhấn bất kì để tiếp tục, sau đó chuyển state
 void handleGameOverInput(MatchState& match, UIState& ui); // Nhất enter để quay lại main menu, hoặc esc để thoát game
 
+
+
+// handleInput trong nhu the nay thoi, chu yeu cai dat may ham kia
+// nho dem phan cai dat qua file .cpp
 void handleInput(MatchState& match, UIState& ui) {
     switch (ui.currentScreen) {
     case MAIN_MENU:
-        handleMainMenuInput(ui); // Giao cho thằng A làm
+        handleMainMenuInput(ui);
         break;
     case CHARACTER_SELECTION:
-        handleCharSelectionInput(match, ui); // Giao cho thằng B làm
+        handleCharSelectionInput(match, ui);
         break;
     case GAME_BOARD:
-        handleGameplayInput(match, ui); // Bạn làm (logic lõi)
+        handleGameplayInput(match, ui);
         break;
     case ROUND_OVER:
         handleRoundOverInput(match, ui);
