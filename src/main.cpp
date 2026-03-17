@@ -1,6 +1,8 @@
-#include "model.h"
-#include "controller.h"
-#include "view.h"
+//#include "model.h"
+//#include "controller.h"
+//#include "view.h"
+
+#include "raylib.h"
 
 int main() {
     InitWindow(800, 600, "Game Caro RPG");
