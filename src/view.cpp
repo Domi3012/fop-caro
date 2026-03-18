@@ -1,17 +1,35 @@
 #include "view.h"
 #include "raylib.h"
 #include <string>
+#include <vector>
 
 using std::string;
+using std::vector;
 
+// Vài màu dùng chung
 
+const Color buttonYellow = GetColor(0xD9E69AFF);
+const Color buttonDarkPurple = GetColor(0x240620FF);
+
+// Vài texture dùng chung
 static Texture2D menuBg;
-static Font fontTtf = LoadFontEx("assets/fonts/Ithaca.ttf", 32, 0, 250);
+static Texture2D plainBg;
+static Font font8bit;
 
-// vai ham noi bo
+// Declaration cua vai ham noi bo
+void drawBackground(const UIState& ui);
 // main menu:
 void drawMenuButton(const UIState& ui);
+void drawMenu(const UIState& ui);
+// game caro:
+void drawCaroGame(const MatchState& match, const UIState& ui);
+void drawBoard(const MatchState& match, const UIState& ui);
+void drawStatusPanel(const MatchState& match); // Vẽ máu, tên nhân vật
+// char select
+void drawCharSelection(const UIState& ui);
 
+
+// --- HAM RENDER TONG ---
 void renderGame(const MatchState& match, const UIState& ui) {
     switch (ui.currentScreen) {
     case MAIN_MENU:
@@ -19,9 +37,11 @@ void renderGame(const MatchState& match, const UIState& ui) {
         break;
 
     case CHARACTER_SELECTION:
+        drawCharSelection(ui);
         break;
 
     case GAME_BOARD:
+        drawCaroGame(match, ui);
         break;
 
     case ROUND_OVER:
@@ -32,64 +52,151 @@ void renderGame(const MatchState& match, const UIState& ui) {
     }
 }
 
-void drawMenu(const UIState& ui) {
-    int screenWidth = GetScreenWidth();
-    int screenHeight = GetScreenHeight();
-
-    float scale = std::max((float)screenHeight / menuBg.height,
-                     (float)screenHeight / menuBg.height);
-
-    DrawTextureEx(menuBg, { 0.0f, 0.0f }, 0.0f, scale, WHITE);
-
-    drawMenuButton(ui);
-}
-
+// --- HAI HAM INIT VA UNDLOAD RESUOUCE ---
 void initView() {
     menuBg = LoadTexture("./assets/images/menuBg.png");
+    plainBg = LoadTexture("./assets/images/plainBg.jpg");
+	font8bit = LoadFont("./assets/fonts/Ithaca.ttf");
+
+    //SetTextureFilter(font8bit.texture, TEXTURE_FILTER_POINT);
 }
 
 void unloadView() {
     UnloadTexture(menuBg);
+    UnloadTexture(plainBg);
+    UnloadFont(font8bit);
+
+}
+
+
+// --- CAC HAM LIEN QUAN DEN MAIN MENU ---
+void drawMenu(const UIState& ui) {
+    drawBackground(ui);
+
+    drawMenuButton(ui);
 }
 
 void drawMenuButton(const UIState& ui) {
-    string options[] = { "Start Game", "Exit"}; // Khớp với controller của bạn
-    const int menuFontSize = 30;
-    int totalOptions = 2;
-
+    vector<string> options = { "New Game", "Exit" }; // them option thi them vao day, nho chinh lai size voi padding cho vua du
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
+    int buttonWidth = 0.2 * screenW;
+    int buttonHeight = 0.15 * screenH;
+    int totalOptions = options.size();
+
+    // font
+    float menuFontSize = buttonHeight * 0.45f;
+    float spacing = 2.0f;
 
     for (int i = 0; i < totalOptions; i++) {
-        int buttonWidth = 0.2*screenW;
-        int buttonHeight = 0.15*screenH;
+        
         int posX = screenW / 2 - buttonWidth / 2;
         int posY = screenH * 0.45 + i * (buttonHeight + 0.05*screenH); // Cách nhau 70px nếu có nhiều nút
 
         // Kiểm tra xem nút này có đang được chọn không (dựa vào UIState)
-        bool isSelected = (ui.mainMenuIndex == (i + 1));
+        bool isSelected = ((ui.mainMenuIndex % totalOptions) == i);
 
         // Đổi màu nếu được chọn
-        Color buttonYellow = GetColor(0xD9E69AFF);
-        Color buttonDarkPurple = GetColor(0x240620FF);
+        
 
         Color bgColor = isSelected ? buttonYellow : buttonDarkPurple;
-        Color borderColor = buttonDarkPurple;
+        Color borderColor = isSelected ? BLACK : buttonDarkPurple;
         Color textColor = isSelected ? buttonDarkPurple: buttonYellow;
 
-        // Vẽ thân nút và viền (kiểu 8-bit vuông vức)
         DrawRectangle(posX, posY, buttonWidth, buttonHeight, bgColor);
         DrawRectangleLinesEx({ (float)posX, (float)posY, (float)buttonWidth, (float)buttonHeight }, 4, borderColor); // Viền dày 4px
 
-        int textWidth = MeasureText(options[i].c_str(), menuFontSize);
+        int textWidth = MeasureTextEx(font8bit, options[i].c_str(), menuFontSize, spacing).x;
 
-        // 3. Áp dụng công thức căn giữa
         int textX = posX + (buttonWidth - textWidth) / 2;
         int textY = posY + (buttonHeight - menuFontSize) / 2;
 
         // Vẽ chữ (Bạn nên LoadFont thay vì dùng font mặc định để ra chất 8-bit)
-        //LoadFont("./assets/fonts/Ithaca.ttf");
-        
-        DrawText(options[i].c_str(), textX, textY, menuFontSize, textColor);
+        Vector2 textSize = MeasureTextEx(font8bit, options[i].c_str(), menuFontSize, spacing);
+
+        DrawTextEx(font8bit, options[i].c_str(), {(float)textX, (float)textY}, menuFontSize, spacing, textColor);
     }
+}
+
+
+// --- CAC HAM LIEN QUAN DEN CHARACTER SELECTION ---
+void drawCharSelection(const UIState& ui) {
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+    drawBackground(ui);
+
+    // Ve ai dang chon
+    float headerFontSize = 0.15 * screenH; // 15% chieu cao man hinh
+    if (ui.isSelectingX) {
+        DrawTextEx(font8bit, "X is choosing...", { 0.02f*screenW , 0 }, headerFontSize, 0.0, buttonYellow);
+    }
+    else {
+        DrawTextEx(font8bit, "O is choosing...", { 0.02f * screenW , 0 }, headerFontSize, 0.0, buttonYellow);
+    }
+    
+
+    // Ve chon nhan vat gi
+    float charNameFontSize = 0.1 * screenH; // 10% chieu cao man hinh
+    float charDescFontSize = 0.05 * screenH; // 5% chieu cao man hinh
+
+    Vector2 measureName, measureDesc;
+    switch (abs(ui.characterMenuIndex % 3)) {
+    case 0:
+        measureName = MeasureTextEx(font8bit, "ASSASSIN", charNameFontSize, 0.0);
+        measureDesc = MeasureTextEx(font8bit, "Skill: Output damage increase significantly as the round goes on", charDescFontSize, 0.0f);
+        DrawTextEx(font8bit, "ASSASSIN", { screenW / 2 - measureName.x / 2, screenH / 2 - measureName.y / 2 }, charNameFontSize, 0.0, buttonYellow);
+        DrawTextEx(font8bit, "Skill: Output damage increase significantly as the round goes on", 
+            { screenW / 2 - measureDesc.x / 2, screenH / 2 + measureName.y / 2 }, charDescFontSize, 0.0, BLACK);
+        break;
+    case 1:
+        measureName = MeasureTextEx(font8bit, "BRUISER", charNameFontSize, 0.0);
+        measureDesc = MeasureTextEx(font8bit, "Skill: Output damage is a moderately high constant value", charDescFontSize, 0.0f);
+        DrawTextEx(font8bit, "BRUISER", { screenW / 2 - measureName.x / 2, screenH / 2 - measureName.y / 2 }, charNameFontSize, 0.0, buttonYellow);
+        DrawTextEx(font8bit, "Skill: Output damage is always a moderately high constant",
+            { screenW / 2 - measureDesc.x / 2, screenH / 2 + measureName.y / 2 }, charDescFontSize, 0.0, BLACK);
+        break;
+    case 2:
+        measureName = MeasureTextEx(font8bit, "VAMPIRE", charNameFontSize, 0.0);
+        measureDesc = MeasureTextEx(font8bit, "Skill: Heals a small, random amount of HP when attack", charDescFontSize, 0.0f);
+        DrawTextEx(font8bit, "VAMPIRE", { screenW / 2 - measureName.x / 2, screenH / 2 - measureName.y / 2 }, charNameFontSize, 0.0, buttonYellow);
+        DrawTextEx(font8bit, "Skill: Heals a small, random amount of HP when attack",
+            { screenW / 2 - measureDesc.x / 2, screenH / 2 + measureName.y / 2 }, charDescFontSize, 0.0, BLACK);
+        break;
+
+    }
+
+}
+
+
+// --- CAC HAM LIEN QUAN DEN GAME CARO
+void drawCaroGame(const MatchState& match, const UIState& ui) {
+    drawBackground(ui);
+}
+
+void drawBoard(const MatchState& match, const UIState& ui) {
+
+}
+
+void drawStatusPanel(const MatchState& match) {
+
+}
+
+
+void drawBackground(const UIState& ui) {
+    int screenWidth = GetScreenWidth();
+    int screenHeight = GetScreenHeight();
+
+    Texture2D bg;
+    switch (ui.currentScreen) {
+    case MAIN_MENU:
+        bg = menuBg;
+        break;
+    default:
+        bg = plainBg;
+    }
+
+    float scale = std::max((float)screenHeight / bg.height,
+        (float)screenHeight / bg.height);
+
+    DrawTextureEx(bg, { 0.0f, 0.0f }, 0.0f, scale, WHITE);
 }
