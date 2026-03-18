@@ -1,5 +1,6 @@
 #include "view.h"
 #include "raylib.h"
+#include "model.h"
 #include <string>
 #include <vector>
 
@@ -27,6 +28,8 @@ void drawBoard(const MatchState& match, const UIState& ui);
 void drawStatusPanel(const MatchState& match); // Vẽ máu, tên nhân vật
 // char select
 void drawCharSelection(const UIState& ui);
+// game over
+void drawGameOver(const MatchState& match, const UIState& ui);
 
 
 // --- HAM RENDER TONG ---
@@ -48,6 +51,7 @@ void renderGame(const MatchState& match, const UIState& ui) {
         break;
 
     case GAME_OVER:
+        drawGameOver(match, ui);
         break;
     }
 }
@@ -58,7 +62,7 @@ void initView() {
     plainBg = LoadTexture("./assets/images/plainBg.jpg");
 	font8bit = LoadFont("./assets/fonts/Ithaca.ttf");
 
-    //SetTextureFilter(font8bit.texture, TEXTURE_FILTER_POINT);
+    SetTextureFilter(font8bit.texture, TEXTURE_FILTER_POINT);
 }
 
 void unloadView() {
@@ -169,17 +173,17 @@ void drawCharSelection(const UIState& ui) {
 
 
 // --- CAC HAM LIEN QUAN DEN GAME CARO
-void drawCaroGame(const MatchState& match, const UIState& ui) {
-    drawBackground(ui);
-}
-
-void drawBoard(const MatchState& match, const UIState& ui) {
-
-}
-
-void drawStatusPanel(const MatchState& match) {
-
-}
+//void drawCaroGame(const MatchState& match, const UIState& ui) {
+//    drawBackground(ui);
+//}
+//
+//void drawBoard(const MatchState& match, const UIState& ui) {
+//
+//}
+//
+//void drawStatusPanel(const MatchState& match) {
+//
+//}
 
 
 void drawBackground(const UIState& ui) {
@@ -196,7 +200,118 @@ void drawBackground(const UIState& ui) {
     }
 
     float scale = std::max((float)screenHeight / bg.height,
-        (float)screenHeight / bg.height);
+        (float)screenWidth / bg.width);
 
     DrawTextureEx(bg, { 0.0f, 0.0f }, 0.0f, scale, WHITE);
+}
+
+
+// Nhom ban co
+void drawCaroGame(const MatchState& match, const UIState& ui) {
+    drawBackground(ui);
+
+    // Vẽ hai bên trước, vẽ bàn cờ ở giữa sau
+    drawStatusPanel(match);
+    drawBoard(match, ui);
+}
+
+void drawBoard(const MatchState& match, const UIState& ui) {
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    // Responsive: Bàn cờ chiếm 80% chiều cao màn hình
+    float boardPixelSize = screenH * 0.8f;
+    float cellSize = boardPixelSize / BOARD_SIZE;
+
+    // Căn giữa bàn cờ
+    float startX = (screenW - boardPixelSize) / 2.0f;
+    float startY = (screenH - boardPixelSize) / 2.0f;
+
+    // Vẽ nền bàn cờ (màu tối để nổi bật viền)
+    DrawRectangle(startX, startY, boardPixelSize, boardPixelSize, Fade(BLACK, 0.6f));
+
+    // Vẽ các ô cờ
+    for (int row = 0; row < BOARD_SIZE; row++) {
+        for (int col = 0; col < BOARD_SIZE; col++) {
+            float cellX = startX + col * cellSize;
+            float cellY = startY + row * cellSize;
+
+            // 1. Vẽ khung từng ô
+            DrawRectangleLinesEx({ cellX, cellY, cellSize, cellSize }, 2, buttonDarkPurple);
+
+            // 2. Vẽ Highlight nếu con trỏ đang ở ô này
+            if (col == ui.cursorX && row == ui.cursorY) {
+                DrawRectangle(cellX, cellY, cellSize, cellSize, Fade(buttonYellow, 0.4f));
+                DrawRectangleLinesEx({ cellX, cellY, cellSize, cellSize }, 4, buttonYellow);
+            }
+
+            // 3. Vẽ X hoặc O
+            PlayerType piece = match.currentRound.board[row][col];
+            if (piece != NONE) {
+                string text = (piece == X) ? "X" : "O";
+                Color pieceColor = (piece == X) ? RED : BLUE;
+                float pieceFontSize = cellSize * 0.7f;
+
+                // Căn giữa chữ X/O vào giữa ô cờ
+                Vector2 textSize = MeasureTextEx(font8bit, text.c_str(), pieceFontSize, 0);
+                float textX = cellX + (cellSize - textSize.x) / 2.0f;
+                float textY = cellY + (cellSize - textSize.y) / 2.0f;
+
+                DrawTextEx(font8bit, text.c_str(), { textX, textY }, pieceFontSize, 0, pieceColor);
+            }
+        }
+    }
+}
+
+void drawStatusPanel(const MatchState& match) {
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    // Font size responsive
+    float nameFontSize = screenH * 0.08f;
+    float hpFontSize = screenH * 0.04f;
+
+    // Kích thước thanh máu (HP Bar)
+    float hpBarWidth = screenW * 0.2f;  // Chiếm 20% chiều ngang
+    float hpBarHeight = screenH * 0.05f; // Chiếm 5% chiều cao
+
+    // VỊ TRÍ PANEL PLAYER X (BÊN TRÁI)
+    float leftX = screenW * 0.05f;
+    float leftY = screenH * 0.2f;
+
+    DrawTextEx(font8bit, "Player X", { leftX, leftY }, nameFontSize, 0, RED);
+    // Tính toán máu X
+    float hpFillX = hpBarWidth * ((float)match.playerX.health / MAX_HEALTH);
+    DrawRectangleLinesEx({ leftX, leftY + nameFontSize + 10, hpBarWidth, hpBarHeight }, 3, BLACK);
+    DrawRectangle(leftX, leftY + nameFontSize + 10, hpFillX, hpBarHeight, RED);
+    DrawTextEx(font8bit, TextFormat("HP: %d/%d", match.playerX.health, MAX_HEALTH),
+        { leftX, leftY + nameFontSize + hpBarHeight + 20 }, hpFontSize, 0, BLACK);
+
+
+    // VỊ TRÍ PANEL PLAYER O (BÊN PHẢI)
+    float rightX = screenW * 0.95f - hpBarWidth; // Neo về bên phải
+    float rightY = screenH * 0.2f;
+
+    DrawTextEx(font8bit, "Player O", { rightX, rightY }, nameFontSize, 0, BLUE);
+    // Tính toán máu O
+    float hpFillO = hpBarWidth * ((float)match.playerO.health / MAX_HEALTH);
+    DrawRectangleLinesEx({ rightX, rightY + nameFontSize + 10, hpBarWidth, hpBarHeight }, 3, BLACK);
+    DrawRectangle(rightX, rightY + nameFontSize + 10, hpFillO, hpBarHeight, BLUE);
+    DrawTextEx(font8bit, TextFormat("HP: %d/%d", match.playerO.health, MAX_HEALTH),
+        { rightX, rightY + nameFontSize + hpBarHeight + 20 }, hpFontSize, 0, BLACK);
+}
+
+// nhom game over: Lam tam
+void drawGameOver(const MatchState& match, const UIState& ui) {
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    drawBackground(ui);
+
+    Vector2 measure = MeasureTextEx(font8bit, "GAME OVER", 0.25f*screenH, 0.0);
+    Vector2 measureStat= MeasureTextEx(font8bit, "X WINS", 0.15f*screenH, 0.0f);
+    DrawTextEx(font8bit, "GAME OVER", { screenW / 2 - measure.x / 2, screenH * 0.4f - measure.y / 2 }, 0.25f*screenH, 0.0, buttonYellow);
+    DrawTextEx(font8bit, (match.matchResult == X_WINS) ? "X WINS" : "O WINS",
+        { screenW / 2 - measureStat.x / 2, screenH * 0.4f + measure.y / 2 }, 0.15f*screenH, 0.0, BLACK);
+
 }
