@@ -34,6 +34,7 @@ void drawGameOver(const MatchState& match, const UIState& ui);
 
 // --- HAM RENDER TONG ---
 void renderGame(const MatchState& match, const UIState& ui) {
+    ClearBackground(BLACK);
     switch (ui.currentScreen) {
     case MAIN_MENU:
         drawMenu(ui);
@@ -48,8 +49,25 @@ void renderGame(const MatchState& match, const UIState& ui) {
         break;
 
     case ROUND_OVER:
-        break;
+    {
+        static RoundResult lastResult = ONGOING;
+        if (match.currentRound.result != ONGOING)
+            lastResult = match.currentRound.result;
 
+        drawCaroGame(match, ui);
+
+        int screenW = GetScreenWidth();
+        int screenH = GetScreenHeight();
+        float fontSize = screenH * 0.1f;
+        const char* msg = (lastResult == X_WINS) ? "X WINS THIS ROUND!" :
+            (lastResult == O_WINS) ? "O WINS THIS ROUND!" :
+            "DRAW!";
+        Vector2 measure = MeasureTextEx(font8bit, msg, fontSize, 0);
+        DrawRectangle(0, screenH * 0.4f - 20, screenW, fontSize + 40, Fade(BLACK, 0.75f));
+        DrawTextEx(font8bit, msg,
+            { screenW / 2.0f - measure.x / 2, screenH * 0.4f }, fontSize, 0, buttonYellow);
+        break;
+    }
     case GAME_OVER:
         drawGameOver(match, ui);
         break;
@@ -68,6 +86,8 @@ void initView() {
 void unloadView() {
     UnloadTexture(menuBg);
     UnloadTexture(plainBg);
+
+
     UnloadFont(font8bit);
 
 }
@@ -75,12 +95,14 @@ void unloadView() {
 
 // --- CAC HAM LIEN QUAN DEN MAIN MENU ---
 void drawMenu(const UIState& ui) {
+    
     drawBackground(ui);
 
     drawMenuButton(ui);
 }
 
 void drawMenuButton(const UIState& ui) {
+    
     vector<string> options = { "New Game", "Exit" }; // them option thi them vao day, nho chinh lai size voi padding cho vua du
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
@@ -125,6 +147,7 @@ void drawMenuButton(const UIState& ui) {
 
 // --- CAC HAM LIEN QUAN DEN CHARACTER SELECTION ---
 void drawCharSelection(const UIState& ui) {
+    
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
     drawBackground(ui);
@@ -171,22 +194,8 @@ void drawCharSelection(const UIState& ui) {
 
 }
 
-
-// --- CAC HAM LIEN QUAN DEN GAME CARO
-//void drawCaroGame(const MatchState& match, const UIState& ui) {
-//    drawBackground(ui);
-//}
-//
-//void drawBoard(const MatchState& match, const UIState& ui) {
-//
-//}
-//
-//void drawStatusPanel(const MatchState& match) {
-//
-//}
-
-
 void drawBackground(const UIState& ui) {
+    
     int screenWidth = GetScreenWidth();
     int screenHeight = GetScreenHeight();
 
@@ -208,6 +217,7 @@ void drawBackground(const UIState& ui) {
 
 // Nhom ban co
 void drawCaroGame(const MatchState& match, const UIState& ui) {
+    
     drawBackground(ui);
 
     // Vẽ hai bên trước, vẽ bàn cờ ở giữa sau
@@ -216,6 +226,7 @@ void drawCaroGame(const MatchState& match, const UIState& ui) {
 }
 
 void drawBoard(const MatchState& match, const UIState& ui) {
+    
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
@@ -264,6 +275,7 @@ void drawBoard(const MatchState& match, const UIState& ui) {
 }
 
 void drawStatusPanel(const MatchState& match) {
+    
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
@@ -303,6 +315,7 @@ void drawStatusPanel(const MatchState& match) {
 
 // nhom game over: Lam tam
 void drawGameOver(const MatchState& match, const UIState& ui) {
+    
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 

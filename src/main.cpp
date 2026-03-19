@@ -3,10 +3,10 @@
 #include "controller.h"
 #include "view.h"
 
-int main() {
+int main()
+{
     // 1. Báo cho Raylib biết mình muốn chạy Fullscreen
     SetConfigFlags(FLAG_FULLSCREEN_MODE);
-    
 
     // 2. Truyền 0, 0 để tự động fit với độ phân giải màn hình hiện tại
     InitWindow(0, 0, "RGBCaro - The RPG Caro Game");
@@ -16,14 +16,18 @@ int main() {
     MatchState match;
     UIState ui;
     ui.currentScreen = MAIN_MENU;
-    ui.mainMenuIndex = 1;
+    ui.mainMenuIndex = 0;
 
-    while (!WindowShouldClose()) {
-		if (IsKeyPressed(KEY_ESCAPE)) break; // Cho phép thoát game bằng phím Esc
+    initRound(match.currentRound, 0);
 
+    while (!WindowShouldClose())
+    {
+        handleInput(match, ui);
+        if (IsKeyDown(KEY_ESCAPE))
+            break;
 
         BeginDrawing();
-        
+
         renderGame(match, ui);
 
         EndDrawing();

@@ -55,14 +55,14 @@ struct MatchState {
 };
 
 
-// IV. Các hàm cần viết (to do của nhóm Model):
+// IV. Các hàm cần viết (to do của nhóm Model): 
 // Các hàm khởi tạo
-//void initMatch(MatchState& matchState, const Player& playerX, const Player& playerY); // Gọi initRound và set giá trị
-//void initRound(RoundState& roundState, int roundCount); // Vòng lẻ X đi trước, vòng chẵn O đi trước
-//
-//// Các hàm xử lý logic trò chơi
-//bool checkValidMove(const RoundState& roundState, int x, int y); // Kiểm tra nước đi hợp lệ, cần viết để bổ trợ mấy lớp khác
-//void makeMove(RoundState& roundState, int x, int y); // Thực hiện nước đi, cập nhật board và turnCount
-//RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int lastMoveY); // Kiểm tra kết quả vòng đấu sau mỗi nước đi
-//void executeAttack(Player& attacker, Player& defender, int turnCount); // Thực hiện tính toán damage raw và áp dụng các hiệu ứng dựa trên loại nhân vật. Nhớ xử lí các trường hợp biên < 0 hay > 100
-//RoundResult checkMatchResult(const MatchState& matchState); // Kiểm tra kết quả ván đấu sau mỗi vòng đấu (sau mỗi lần attack)
+void initMatch(MatchState& matchState, const Player& playerX, const Player& playerY); // Gọi initRound và set giá trị
+void initRound(RoundState& roundState, int roundCount); // Vòng lẻ X đi trước, vòng chẵn O đi trước
+
+// Các hàm xử lý logic trò chơi
+bool checkValidMove(const RoundState& roundState, int x, int y); // Kiểm tra nước đi hợp lệ, cần viết để bổ trợ mấy lớp khác
+void makeMove(RoundState& roundState, int x, int y); // Thực hiện nước đi, cập nhật board và turnCount
+RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int lastMoveY); // Kiểm tra kết quả vòng đấu sau mỗi nước đi
+void executeAttack(Player& attacker, Player& defender, int turnCount); // Thực hiện tính toán damage raw và áp dụng các hiệu ứng dựa trên loại nhân vật. Nhớ xử lí các trường hợp biên < 0 hay > 100
+RoundResult checkMatchResult(const MatchState& matchState); // Kiểm tra kết quả ván đấu sau mỗi vòng đấu (sau mỗi lần attack)
