@@ -136,8 +136,9 @@
     <ClCompile Include="src\view.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="audio_manager.h" />
     <ClInclude Include="save_manager.h" />
+    <ClInclude Include="src\audio_manager.h" />
+    <ClInclude Include="src\bot_ai.h" />
     <ClInclude Include="src\controller.h" />
     <ClInclude Include="src\model.h" />
     <ClInclude Include="src\view.h" />
