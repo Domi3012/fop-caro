@@ -130,9 +130,12 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\audio_manager.cpp" />
+    <ClCompile Include="src\bot_ai.cpp" />
     <ClCompile Include="src\controller.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\model.cpp" />
+    <ClCompile Include="src\save_manager.cpp" />
     <ClCompile Include="src\view.cpp" />
   </ItemGroup>
   <ItemGroup>
