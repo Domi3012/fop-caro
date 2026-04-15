@@ -43,6 +43,8 @@ struct RoundState {
 	int turnCount; // Số lượt đã chơi
 	vector<vector<PlayerType>> board; // Bàn cờ
 	RoundResult result; // Kết quả của vòng đấu
+
+	std::vector<std::pair<int, int>> winningCells;
 };
 
 // Mô hình một ván đấu (gồm nhiều game cờ caro)

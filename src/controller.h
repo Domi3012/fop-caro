@@ -8,7 +8,9 @@ enum GameScreen { // Bản mvp nên đơn giản thôi
 	CHARACTER_SELECTION,
 	GAME_BOARD,
 	ROUND_OVER,
-	GAME_OVER
+	GAME_OVER,
+	LOAD_GAME, 
+	SETTINGS
 };
 
 struct UIState {
@@ -24,6 +26,12 @@ struct UIState {
 	// Game board:
 	int cursorX;
 	int cursorY;
+
+	// load menu
+	int loadMenuIndex;       // Vị trí con trỏ đang chọn file save nào
+
+	// settings menu
+	int settingsMenuIndex;   // Vị trí con trỏ đang chọn Audio hay SFX
 };
 
 // CÁC HÀM XỬ LÝ (CHỨC NĂNG CỦA CONTROLLER)
@@ -38,3 +46,9 @@ void handleGameOverInput(MatchState& match, UIState& ui); // Nhất enter để 
 void handleInput(MatchState& match, UIState& ui);
 
 
+// Các hàm xử lý input mới (Dành cho Dev 1 & 2)
+void handleLoadGameInput(MatchState& match, UIState& ui, const std::vector<std::string>& saveFiles);
+void handleSettingsInput(UIState& ui);
+
+// Hàm setup độ phân giải/scale (Dành cho Dev 1)
+void applyCameraAndScaling(); // Gọi ở đầu game hoặc khi thay đổi cửa sổ
