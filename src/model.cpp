@@ -1,4 +1,4 @@
-﻿#include "model.h"
+#include "model.h"
 #include <cstdlib> // dùng cho rand()
 
 
@@ -180,7 +180,7 @@ RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int la
 
 
     // =============================
-    // kiểm tra chéo \
+    // kiem tra cheo (top-left to bottom-right)
     // =============================
     count = 1;
 

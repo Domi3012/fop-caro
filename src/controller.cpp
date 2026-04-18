@@ -1,5 +1,7 @@
 #include "controller.h"
 #include "view.h"
+#include "save_manager.h"
+
 
 // handleMainMenuInput:
 // Lên xuống để di chuyển mainMenuIndex
@@ -13,9 +15,7 @@ void handleMainMenuInput(UIState& ui) {
 
     if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
     {
-        // có 2 option nên giới hạn là 1
-        // nếu thêm option thì sửa giới hạn này
-        if (ui.mainMenuIndex < 1) 
+        if (ui.mainMenuIndex < 3) // 4 options: index 0,1,2,3 
             ui.mainMenuIndex++;
     }
 
@@ -29,11 +29,18 @@ void handleMainMenuInput(UIState& ui) {
             ui.isSelectingX = true;
             ui.characterMenuIndex = 1;
             break;
-        // Option 1: Exit game
         case(1):
-            unloadView();
-            CloseWindow();
-            exit(0);
+            ui.currentScreen = LOAD_GAME;
+            ui.loadMenuIndex = 0;
+            break;
+        // Option 2: Settings
+        case(2):
+            ui.currentScreen = SETTINGS;
+            ui.settingsMenuIndex = 0;
+            break;
+        // Option 3: Exit game
+        case(3):
+            ui.shouldExit = true;
             break;
         }
     }
@@ -94,11 +101,8 @@ void handleCharSelectionInput(MatchState& match, UIState& ui) {
 
             initMatch(match, playerX, playerO);
 
-            // Con trỏ bắt đầu ở giữa bàn cờ
-            ui.cursorX = BOARD_SIZE / 2;
-            ui.cursorY = BOARD_SIZE / 2;
-
-            ui.currentScreen = GAME_BOARD;
+            // Dùng startMatch() để thống nhất flow chuyển sang GAME_BOARD
+            startMatch(ui);
         }
     }
 
@@ -196,14 +200,10 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
 // Nếu match còn ONGOING -> khởi tạo round mới, quay lại GAME_BOARD
 // Nếu match kết thúc   -> chuyển sang GAME_OVER
 void handleRoundOverInput(MatchState& match, UIState& ui) {
-    static float timer = 0.0f;
+    ui.roundOverTimer += GetFrameTime();
 
-    timer += GetFrameTime();
-
-    if (timer < 2.0f)
+    if (ui.roundOverTimer < 2.0f)
         return;
-
-    timer = 0.0f;
 
     RoundResult mr = checkMatchResult(match);
     if (mr == X_WINS || mr == O_WINS)
@@ -214,9 +214,7 @@ void handleRoundOverInput(MatchState& match, UIState& ui) {
     else
     {
         initRound(match.currentRound, match.countRoundsPlayed);
-        ui.cursorX = BOARD_SIZE / 2;
-        ui.cursorY = BOARD_SIZE / 2;
-        ui.currentScreen = GAME_BOARD;
+        startMatch(ui); // reset cursor + timer + chuyển sang GAME_BOARD
     }
 }
 
@@ -234,26 +232,50 @@ void handleGameOverInput(MatchState& match, UIState& ui) {
 
     if (IsKeyPressed(KEY_ESCAPE))
     {
-        unloadView();
-        CloseWindow();
-        exit(0);
+        ui.currentScreen = MAIN_MENU; // Thay vì CloseWindow()
     }
 
     (void)match;
 }
 
 
+// startMatch:
+// Điểm thống nhất để khởi động game sau khi match đã được khởi tạo.
+// Dùng chung cho cả New Game (sau initMatch) lẫn Load Game (sau loadGame)
+// và bắt đầu round mới (sau initRound trong handleRoundOverInput).
+void startMatch(UIState& ui) {
+    ui.cursorX = BOARD_SIZE / 2;
+    ui.cursorY = BOARD_SIZE / 2;
+    ui.roundOverTimer = 0.0f; // luôn reset timer khi bắt đầu game/round
+    ui.currentScreen = GAME_BOARD;
+}
+
+
 // handleInput:
 // Dispatcher trung tâm, gọi đúng handler theo màn hình hiện tại
 void handleInput(MatchState& match, UIState& ui) {
+    // Lấy danh sách save files một lần để tránh gọi nhiều lần trong 1 frame
+    static std::vector<std::string> cachedSaveFiles;
+
     switch (ui.currentScreen)
     {
     case MAIN_MENU:
         handleMainMenuInput(ui);
+        // Khi vừa chuyển vào màn LOAD_GAME, refresh danh sách file save
+        if (ui.currentScreen == LOAD_GAME)
+            cachedSaveFiles = getSaveFilesList();
         break;
 
     case CHARACTER_SELECTION:
         handleCharSelectionInput(match, ui);
+        break;
+
+    case LOAD_GAME:
+        handleLoadGameInput(match, ui, cachedSaveFiles);
+        break;
+
+    case SETTINGS:
+        handleSettingsInput(ui);
         break;
 
     case GAME_BOARD:
@@ -267,5 +289,43 @@ void handleInput(MatchState& match, UIState& ui) {
     case GAME_OVER:
         handleGameOverInput(match, ui);
         break;
+    }
+}
+
+void handleLoadGameInput(MatchState& match, UIState& ui, const std::vector<std::string>& saveFiles) {
+    // Nếu không có file save, ấn phím bất kỳ để thoát ra Main Menu
+    if (saveFiles.empty()) {
+        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER)) {
+            ui.currentScreen = MAIN_MENU;
+        }
+        return;
+    }
+
+    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP)) {
+        if (ui.loadMenuIndex > 0) ui.loadMenuIndex--;
+    }
+
+    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN)) {
+        if (ui.loadMenuIndex < (int)saveFiles.size() - 1) ui.loadMenuIndex++;
+    }
+
+    // Chọn file để load
+    if (IsKeyPressed(KEY_ENTER)) {
+        // Dùng startMatch() để thống nhất flow chuyển sang GAME_BOARD
+        if (loadGame(match, saveFiles[ui.loadMenuIndex])) {
+            startMatch(ui);
+        }
+    }
+
+    // Bấm ESC để quay lại
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        ui.currentScreen = MAIN_MENU;
+    }
+}
+
+void handleSettingsInput(UIState& ui) {
+    // Bấm ESC để quay lại Main Menu
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        ui.currentScreen = MAIN_MENU;
     }
 }

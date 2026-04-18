@@ -1,6 +1,7 @@
 #include "view.h"
 #include "raylib.h"
 #include "model.h"
+#include "save_manager.h"
 #include <string>
 #include <vector>
 
@@ -13,12 +14,39 @@ const Color buttonYellow = GetColor(0xD9E69AFF);
 const Color buttonDarkPurple = GetColor(0x240620FF);
 
 // Vài texture dùng chung
-static Texture2D menuBg;
-static Texture2D plainBg;
 static Font font8bit;
 
+// --- PARALLAX BACKGROUND ---
+// Tên file các layer rừng, xếp từ xa nhất (index 0) đến gần nhất (index 11)
+// Quy ước: số suffix càng nhỏ = càng gần = càng nhanh
+static const char* FOREST_LAYER_PATHS[] = {
+    "./assets/images/layered_forest/Layer_0011_0.png",  // xa nhất - chậm nhất
+    "./assets/images/layered_forest/Layer_0010_1.png",
+    "./assets/images/layered_forest/Layer_0009_2.png",
+    "./assets/images/layered_forest/Layer_0008_3.png",
+    "./assets/images/layered_forest/Layer_0007_Lights.png",
+    "./assets/images/layered_forest/Layer_0006_4.png",
+    "./assets/images/layered_forest/Layer_0005_5.png",
+    "./assets/images/layered_forest/Layer_0004_Lights.png",
+    "./assets/images/layered_forest/Layer_0003_6.png",
+    "./assets/images/layered_forest/Layer_0002_7.png",
+    "./assets/images/layered_forest/Layer_0001_8.png",
+    "./assets/images/layered_forest/Layer_0000_9.png",  // gần nhất - nhanh nhất
+};
+static const int FOREST_LAYER_COUNT = 12;
+
+struct ParallaxLayer {
+    Texture2D texture;
+    float scrollX;   // offset cuộn hiện tại (pixel, âm = đã cuộn sang trái)
+    float speed;     // pixel/giây
+};
+
+static ParallaxLayer forestLayers[FOREST_LAYER_COUNT];
+
+// Vẽ parallax background cho main menu, gọi mỗi frame
+void drawParallaxBackground();
+
 // Declaration cua vai ham noi bo
-void drawBackground(const UIState& ui);
 // main menu:
 void drawMenuButton(const UIState& ui);
 void drawMenu(const UIState& ui);
@@ -43,6 +71,14 @@ void renderGame(const MatchState& match, const UIState& ui) {
     case CHARACTER_SELECTION:
         drawCharSelection(ui);
         break;
+    
+    case LOAD_GAME:
+        drawLoadGameScreen(ui, getSaveFilesList());
+        break;
+    
+    case SETTINGS:
+        drawSettingsScreen(ui);
+        break;
 
     case GAME_BOARD:
         drawCaroGame(match, ui);
@@ -50,17 +86,14 @@ void renderGame(const MatchState& match, const UIState& ui) {
 
     case ROUND_OVER:
     {
-        static RoundResult lastResult = ONGOING;
-        if (match.currentRound.result != ONGOING)
-            lastResult = match.currentRound.result;
-
         drawCaroGame(match, ui);
 
         int screenW = GetScreenWidth();
         int screenH = GetScreenHeight();
         float fontSize = screenH * 0.1f;
-        const char* msg = (lastResult == X_WINS) ? "X WINS THIS ROUND!" :
-            (lastResult == O_WINS) ? "O WINS THIS ROUND!" :
+        // match.currentRound.result luon duoc set truoc khi chuyen sang ROUND_OVER
+        const char* msg = (match.currentRound.result == X_WINS) ? "X WINS THIS ROUND!" :
+            (match.currentRound.result == O_WINS) ? "O WINS THIS ROUND!" :
             "DRAW!";
         Vector2 measure = MeasureTextEx(font8bit, msg, fontSize, 0);
         DrawRectangle(0, screenH * 0.4f - 20, screenW, fontSize + 40, Fade(BLACK, 0.75f));
@@ -76,81 +109,141 @@ void renderGame(const MatchState& match, const UIState& ui) {
 
 // --- HAI HAM INIT VA UNDLOAD RESUOUCE ---
 void initView() {
-    menuBg = LoadTexture("./assets/images/menuBg.png");
-    plainBg = LoadTexture("./assets/images/plainBg.jpg");
-	font8bit = LoadFont("./assets/fonts/Ithaca.ttf");
+    font8bit = LoadFont("./assets/fonts/Ithaca.ttf");
 
     SetTextureFilter(font8bit.texture, TEXTURE_FILTER_POINT);
+
+    // Load các layer rừng parallax
+    // Tốc độ: layer 0 (xa nhất) = 10 px/s, tăng dần, layer 11 (gần nhất) = 120 px/s
+    for (int i = 0; i < FOREST_LAYER_COUNT; i++) {
+        forestLayers[i].texture = LoadTexture(FOREST_LAYER_PATHS[i]);
+        SetTextureFilter(forestLayers[i].texture, TEXTURE_FILTER_BILINEAR);
+        forestLayers[i].scrollX = 0.0f;
+        // Nội suy tuyến tính: layer 0 chậm, layer 11 nhanh, x 0.25 để chậm lại
+        float t = (float)i / (FOREST_LAYER_COUNT - 1); // 0.0 -> 1.0
+        forestLayers[i].speed = (10.0f + t * 110.0f) * 0.25f; // 2.5 -> 30 px/s
+    }
 }
 
 void unloadView() {
-    UnloadTexture(menuBg);
-    UnloadTexture(plainBg);
-
+    // Unload các layer rừng
+    for (int i = 0; i < FOREST_LAYER_COUNT; i++) {
+        UnloadTexture(forestLayers[i].texture);
+    }
 
     UnloadFont(font8bit);
 
 }
 
 
+// --- PARALLAX BACKGROUND ---
+void drawParallaxBackground() {
+    float dt = GetFrameTime();
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    for (int i = 0; i < FOREST_LAYER_COUNT; i++) {
+        ParallaxLayer& layer = forestLayers[i];
+        Texture2D& tex = layer.texture;
+
+        // Cap nhat offset cuon
+        layer.scrollX -= layer.speed * dt;
+
+        // Source rect: chi lay 2/3 phia duoi cua anh goc (bo 1/3 tren)
+        float srcY = tex.height / 3.0f;
+        float srcH = tex.height * (2.0f / 3.0f);
+        float srcW = (float)tex.width;
+
+        // Dest width: giu aspect ratio cua vung crop, fill full chieu cao man hinh
+        float scaledW = srcW / srcH * screenH;
+
+        // Wrap
+        if (layer.scrollX <= -scaledW)
+            layer.scrollX += scaledW;
+
+        // Ve du so ban de phu kin toan man hinh
+        int copies = (int)((float)screenW / scaledW) + 2;
+        for (int c = 0; c < copies; c++) {
+            Rectangle src  = { 0, srcY, srcW, srcH };
+            Rectangle dest = { layer.scrollX + c * scaledW, 0, scaledW, (float)screenH };
+            DrawTexturePro(tex, src, dest, { 0, 0 }, 0.0f, WHITE);
+        }
+    }
+}
+
 // --- CAC HAM LIEN QUAN DEN MAIN MENU ---
 void drawMenu(const UIState& ui) {
-    
-    drawBackground(ui);
-
+    drawParallaxBackground();
     drawMenuButton(ui);
 }
 
 void drawMenuButton(const UIState& ui) {
     
-    vector<string> options = { "New Game", "Exit" }; // them option thi them vao day, nho chinh lai size voi padding cho vua du
+    vector<string> options = { "New Game", "Load Game", "Settings", "Exit" }; 
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
-    int buttonWidth = 0.2 * screenW;
-    int buttonHeight = 0.15 * screenH;
     int totalOptions = options.size();
 
-    // font
+    // 1. Tính toán không gian hiển thị (Y-axis)
+    float startY = screenH * 0.45f;               // Vị trí bắt đầu vẽ (45% màn hình từ trên xuống)
+    float marginBottom = screenH * 0.05f;         // Chừa lề dưới cùng 5% màn hình
+    float availableHeight = screenH - startY - marginBottom; // Tổng không gian dọc còn lại cho các nút
+
+    // 2. Tính toán khoảng cách (gap) và chiều cao nút (buttonHeight)
+    float gap = screenH * 0.03f;                  // Khoảng cách giữa các nút (3% màn hình)
+    float totalGapSpace = (totalOptions > 1) ? (totalOptions - 1) * gap : 0;
+    
+    // Chia đều không gian còn lại cho tổng số nút
+    float buttonHeight = (availableHeight - totalGapSpace) / totalOptions;
+    
+    // Giới hạn chiều cao tối đa để nút không bị quá to (nếu sau này bớt nút đi)
+    float maxButtonHeight = screenH * 0.15f; 
+    if (buttonHeight > maxButtonHeight) {
+        buttonHeight = maxButtonHeight;
+    }
+
+    // Chiều rộng nút (nới lên 0.3 để vừa chữ "Load Game" / "Settings")
+    float buttonWidth = screenW * 0.2f; 
+    
+    // 3. Tính toán font
     float menuFontSize = buttonHeight * 0.45f;
     float spacing = 2.0f;
 
+    // 4. Vòng lặp vẽ các nút
     for (int i = 0; i < totalOptions; i++) {
         
-        int posX = screenW / 2 - buttonWidth / 2;
-        int posY = screenH * 0.45 + i * (buttonHeight + 0.05*screenH); // Cách nhau 70px nếu có nhiều nút
+        float posX = screenW / 2.0f - buttonWidth / 2.0f;
+        float posY = startY + i * (buttonHeight + gap);
 
         // Kiểm tra xem nút này có đang được chọn không (dựa vào UIState)
         bool isSelected = ((ui.mainMenuIndex % totalOptions) == i);
 
         // Đổi màu nếu được chọn
-        
-
         Color bgColor = isSelected ? buttonYellow : buttonDarkPurple;
         Color borderColor = isSelected ? BLACK : buttonDarkPurple;
         Color textColor = isSelected ? buttonDarkPurple: buttonYellow;
 
-        DrawRectangle(posX, posY, buttonWidth, buttonHeight, bgColor);
-        DrawRectangleLinesEx({ (float)posX, (float)posY, (float)buttonWidth, (float)buttonHeight }, 4, borderColor); // Viền dày 4px
+        // Vẽ background và viền
+        DrawRectangle((int)posX, (int)posY, (int)buttonWidth, (int)buttonHeight, bgColor);
+        DrawRectangleLinesEx({ posX, posY, buttonWidth, buttonHeight }, 4, borderColor); // Viền dày 4px
 
-        int textWidth = MeasureTextEx(font8bit, options[i].c_str(), menuFontSize, spacing).x;
-
-        int textX = posX + (buttonWidth - textWidth) / 2;
-        int textY = posY + (buttonHeight - menuFontSize) / 2;
-
-        // Vẽ chữ (Bạn nên LoadFont thay vì dùng font mặc định để ra chất 8-bit)
+        // Đo kích thước chữ để căn giữa nút
         Vector2 textSize = MeasureTextEx(font8bit, options[i].c_str(), menuFontSize, spacing);
+        float textX = posX + (buttonWidth - textSize.x) / 2.0f;
+        float textY = posY + (buttonHeight - textSize.y) / 2.0f;
 
-        DrawTextEx(font8bit, options[i].c_str(), {(float)textX, (float)textY}, menuFontSize, spacing, textColor);
+        // Vẽ chữ
+        DrawTextEx(font8bit, options[i].c_str(), { textX, textY }, menuFontSize, spacing, textColor);
     }
 }
 
 
 // --- CAC HAM LIEN QUAN DEN CHARACTER SELECTION ---
 void drawCharSelection(const UIState& ui) {
-    
+    drawParallaxBackground();
+
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
-    drawBackground(ui);
 
     // Ve ai dang chon
     float headerFontSize = 0.15 * screenH; // 15% chieu cao man hinh
@@ -194,31 +287,12 @@ void drawCharSelection(const UIState& ui) {
 
 }
 
-void drawBackground(const UIState& ui) {
-    
-    int screenWidth = GetScreenWidth();
-    int screenHeight = GetScreenHeight();
-
-    Texture2D bg;
-    switch (ui.currentScreen) {
-    case MAIN_MENU:
-        bg = menuBg;
-        break;
-    default:
-        bg = plainBg;
-    }
-
-    float scale = std::max((float)screenHeight / bg.height,
-        (float)screenWidth / bg.width);
-
-    DrawTextureEx(bg, { 0.0f, 0.0f }, 0.0f, scale, WHITE);
-}
 
 
 // Nhom ban co
 void drawCaroGame(const MatchState& match, const UIState& ui) {
     
-    drawBackground(ui);
+    drawParallaxBackground();
 
     // Vẽ hai bên trước, vẽ bàn cờ ở giữa sau
     drawStatusPanel(match);
@@ -319,7 +393,7 @@ void drawGameOver(const MatchState& match, const UIState& ui) {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    drawBackground(ui);
+    drawParallaxBackground();
 
     Vector2 measure = MeasureTextEx(font8bit, "GAME OVER", 0.25f*screenH, 0.0);
     Vector2 measureStat= MeasureTextEx(font8bit, "X WINS", 0.15f*screenH, 0.0f);
@@ -327,4 +401,35 @@ void drawGameOver(const MatchState& match, const UIState& ui) {
     DrawTextEx(font8bit, (match.matchResult == X_WINS) ? "X WINS" : "O WINS",
         { screenW / 2 - measureStat.x / 2, screenH * 0.4f + measure.y / 2 }, 0.15f*screenH, 0.0, BLACK);
 
+}
+
+void drawLoadGameScreen(const UIState& ui, const std::vector<std::string>& saveFiles) {
+    drawParallaxBackground();
+    
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    DrawTextEx(font8bit, "SELECT SAVE FILE", { screenW / 2.0f - 180, screenH * 0.1f }, 40, 2, buttonYellow);
+
+    if (saveFiles.empty()) {
+        DrawTextEx(font8bit, "No saves found in /saves folder.", { screenW / 2.0f - 250, screenH / 2.0f }, 30, 2, GRAY);
+        DrawTextEx(font8bit, "Press ESC to return.", { screenW / 2.0f - 150, screenH / 2.0f + 50 }, 20, 2, DARKGRAY);
+        return;
+    }
+
+    float startY = screenH * 0.3f;
+    for (size_t i = 0; i < saveFiles.size(); i++) {
+        bool isSelected = ((int)i == ui.loadMenuIndex);
+        Color textColor = isSelected ? buttonDarkPurple : buttonYellow;
+        Color bgColor = isSelected ? buttonYellow : BLANK;
+
+        float yPos = startY + i * 50;
+        DrawRectangle(screenW / 2.0f - 200, yPos - 5, 400, 40, bgColor);
+        DrawTextEx(font8bit, saveFiles[i].c_str(), { screenW / 2.0f - 180, yPos }, 30, 2, textColor);
+    }
+}
+
+void drawSettingsScreen(const UIState& ui) {
+    // mock
+    drawParallaxBackground();
 }
