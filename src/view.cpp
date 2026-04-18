@@ -4,14 +4,15 @@
 #include "save_manager.h"
 #include <string>
 #include <vector>
+#include <cmath>
 
 using std::string;
 using std::vector;
 
 // Vài màu dùng chung
 
-const Color buttonYellow = GetColor(0xD9E69AFF);
-const Color buttonDarkPurple = GetColor(0x240620FF);
+const Color buttonYellow = GetColor(0xb8dbc0FF);
+const Color buttonDarkPurple = GetColor(0x1A2421FF);
 
 // Vài texture dùng chung
 static Font font8bit;
@@ -207,6 +208,21 @@ void drawParallaxBackground(float speedMultiplier) {
 // --- CAC HAM LIEN QUAN DEN MAIN MENU ---
 void drawMenu(const UIState& ui) {
     drawParallaxBackground(1.0f);
+    
+    // Ve title RGBCaro idle loop dao dong
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+    float time = GetTime();
+    
+    float titleY = screenH * 0.12f + std::sin(time * 2.5f) * 15.0f; // len xuong
+    const char* titleText = "RGB Caro";
+    float titleSize = screenH * 0.15f;
+    Vector2 titleMeasure = MeasureTextEx(font8bit, titleText, titleSize, 10);
+    
+    // Bong mo shadow
+    DrawTextEx(font8bit, titleText, { screenW/2.0f - titleMeasure.x/2.0f + 6, titleY + 6 }, titleSize, 10, Fade(BLACK, 0.6f));
+    DrawTextEx(font8bit, titleText, { screenW/2.0f - titleMeasure.x/2.0f, titleY }, titleSize, 10, WHITE); // White or Yellow
+
     drawMenuButton(ui);
 }
 
@@ -218,7 +234,7 @@ void drawMenuButton(const UIState& ui) {
     int totalOptions = options.size();
 
     // 1. Tính toán không gian hiển thị (Y-axis)
-    float startY = screenH * 0.45f;               // Vị trí bắt đầu vẽ (45% màn hình từ trên xuống)
+    float startY = screenH * 0.35f;               // Vị trí bắt đầu vẽ (35% màn hình từ trên xuống)
     float marginBottom = screenH * 0.05f;         // Chừa lề dưới cùng 5% màn hình
     float availableHeight = screenH - startY - marginBottom; // Tổng không gian dọc còn lại cho các nút
 
