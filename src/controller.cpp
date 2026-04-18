@@ -25,9 +25,8 @@ void handleMainMenuInput(UIState& ui) {
         switch (ui.mainMenuIndex) {
         // Option 0: Start Game
         case(0):
-            ui.currentScreen = CHARACTER_SELECTION;
-            ui.isSelectingX = true;
-            ui.characterMenuIndex = 1;
+            ui.currentScreen = MODE_SELECTION;
+            ui.modeMenuIndex = 0;
             break;
         case(1):
             ui.currentScreen = LOAD_GAME;
@@ -101,8 +100,8 @@ void handleCharSelectionInput(MatchState& match, UIState& ui) {
 
             initMatch(match, playerX, playerO);
 
-            // Dùng startMatch() để thống nhất flow chuyển sang GAME_BOARD
-            startMatch(ui);
+            // Bat dau intro animation truoc khi vao GAME_BOARD
+            startGameIntro(ui);
         }
     }
 
@@ -239,6 +238,15 @@ void handleGameOverInput(MatchState& match, UIState& ui) {
 }
 
 
+// startGameIntro:
+// Cai dat introCamX qua ben phai man hinh va chuyen bien trang thai thanh GAME_INTRO
+void startGameIntro(UIState& ui) {
+    ui.introCamX = (float)GetScreenWidth() * 5.0f; // Bat dau xa x5
+    ui.roundOverTimer = 0.0f; // Su dung tam time nay cho intro
+    ui.currentScreen = GAME_INTRO;
+}
+
+
 // startMatch:
 // Điểm thống nhất để khởi động game sau khi match đã được khởi tạo.
 // Dùng chung cho cả New Game (sau initMatch) lẫn Load Game (sau loadGame)
@@ -247,9 +255,68 @@ void startMatch(UIState& ui) {
     ui.cursorX = BOARD_SIZE / 2;
     ui.cursorY = BOARD_SIZE / 2;
     ui.roundOverTimer = 0.0f; // luôn reset timer khi bắt đầu game/round
+    ui.introCamX = 0.0f;
     ui.currentScreen = GAME_BOARD;
 }
 
+// handleModeSelectionInput:
+// W/S hoac A/D de chon giua PVP (0) va PVE (1)
+void handleModeSelectionInput(UIState& ui) {
+    if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT) ||
+        IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP)) {
+        if (ui.modeMenuIndex > 0) ui.modeMenuIndex--;
+    }
+    if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT) ||
+        IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN)) {
+        if (ui.modeMenuIndex < 1) ui.modeMenuIndex++;
+    }
+    if (IsKeyPressed(KEY_ENTER)) {
+        ui.isPVE = (ui.modeMenuIndex == 1);
+        ui.currentScreen = CHARACTER_SELECTION;
+        ui.isSelectingX = true;
+        ui.characterMenuIndex = 1;
+    }
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        ui.currentScreen = MAIN_MENU;
+    }
+}
+
+// handleGameIntroInput:
+// Xu ly logic animation (giam introCamX) hoac skip (Enter/Space)
+void handleGameIntroInput(MatchState& match, UIState& ui) {
+    // Skip intro
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+        ui.introCamX = 0.0f;
+        startMatch(ui);
+        return;
+    }
+
+    float dt = GetFrameTime();
+    ui.roundOverTimer += dt;
+    
+    float totalTime = 3.5f; // Epic intro keo dai 3.5s
+    float totalDistance = (float)GetScreenWidth() * 5.0f;
+    
+    // Su dung Smootherstep ease-in-out: E'(p) = 30 * p^2 * (1-p)^2
+    float p = ui.roundOverTimer / totalTime;
+    if (p >= 1.0f) {
+        ui.introCamX = 0.0f;
+        startMatch(ui);
+        return;
+    }
+    
+    float ep_prime = 30.0f * p * p * (1.0f - p) * (1.0f - p);
+    float velocity = ep_prime * totalDistance / totalTime;
+
+    ui.introCamX -= velocity * dt;
+    
+    if (ui.introCamX <= 0.0f) {
+        ui.introCamX = 0.0f;
+        startMatch(ui);
+    }
+
+    (void)match;
+}
 
 // handleInput:
 // Dispatcher trung tâm, gọi đúng handler theo màn hình hiện tại
@@ -266,8 +333,16 @@ void handleInput(MatchState& match, UIState& ui) {
             cachedSaveFiles = getSaveFilesList();
         break;
 
+    case MODE_SELECTION:
+        handleModeSelectionInput(ui);
+        break;
+
     case CHARACTER_SELECTION:
         handleCharSelectionInput(match, ui);
+        break;
+
+    case GAME_INTRO:
+        handleGameIntroInput(match, ui);
         break;
 
     case LOAD_GAME:

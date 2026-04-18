@@ -44,12 +44,14 @@ struct ParallaxLayer {
 static ParallaxLayer forestLayers[FOREST_LAYER_COUNT];
 
 // Vẽ parallax background cho main menu, gọi mỗi frame
-void drawParallaxBackground();
+void drawParallaxBackground(float speedMultiplier = 1.0f);
 
 // Declaration cua vai ham noi bo
 // main menu:
 void drawMenuButton(const UIState& ui);
 void drawMenu(const UIState& ui);
+void drawModeSelectionScreen(const UIState& ui);
+void drawGameIntro(const MatchState& match, const UIState& ui);
 // game caro:
 void drawCaroGame(const MatchState& match, const UIState& ui);
 void drawBoard(const MatchState& match, const UIState& ui);
@@ -68,6 +70,10 @@ void renderGame(const MatchState& match, const UIState& ui) {
         drawMenu(ui);
         break;
 
+    case MODE_SELECTION:
+        drawModeSelectionScreen(ui);
+        break;
+
     case CHARACTER_SELECTION:
         drawCharSelection(ui);
         break;
@@ -78,6 +84,10 @@ void renderGame(const MatchState& match, const UIState& ui) {
     
     case SETTINGS:
         drawSettingsScreen(ui);
+        break;
+
+    case GAME_INTRO:
+        drawGameIntro(match, ui);
         break;
 
     case GAME_BOARD:
@@ -136,8 +146,31 @@ void unloadView() {
 }
 
 
+
+void drawCharacters(float shiftX) {
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+    
+    // Ve placeholder hinh chu nhat
+    float charW = screenW * 0.08f;
+    float charH = screenH * 0.20f;
+    
+    float baseGroundY = screenH * 0.85f; // Platform khoang 85% manh hinh
+    
+    float posX_X = screenW * 0.15f + shiftX - charW/2.0f;
+    float posX_O = screenW * 0.85f + shiftX - charW/2.0f;
+    
+    DrawRectangle(posX_X, baseGroundY - charH, charW, charH, Fade(RED, 0.8f));
+    DrawRectangleLinesEx({posX_X, baseGroundY - charH, charW, charH}, 3, WHITE);
+    DrawTextEx(font8bit, "X", { posX_X + charW/2.0f - 15, baseGroundY - charH/2.0f - 20 }, 40, 2, WHITE);
+    
+    DrawRectangle(posX_O, baseGroundY - charH, charW, charH, Fade(BLUE, 0.8f));
+    DrawRectangleLinesEx({posX_O, baseGroundY - charH, charW, charH}, 3, WHITE);
+    DrawTextEx(font8bit, "O", { posX_O + charW/2.0f - 15, baseGroundY - charH/2.0f - 20 }, 40, 2, WHITE);
+}
+
 // --- PARALLAX BACKGROUND ---
-void drawParallaxBackground() {
+void drawParallaxBackground(float speedMultiplier) {
     float dt = GetFrameTime();
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
@@ -147,7 +180,7 @@ void drawParallaxBackground() {
         Texture2D& tex = layer.texture;
 
         // Cap nhat offset cuon
-        layer.scrollX -= layer.speed * dt;
+        layer.scrollX -= layer.speed * speedMultiplier * dt;
 
         // Source rect: chi lay 2/3 phia duoi cua anh goc (bo 1/3 tren)
         float srcY = tex.height / 3.0f;
@@ -158,7 +191,7 @@ void drawParallaxBackground() {
         float scaledW = srcW / srcH * screenH;
 
         // Wrap
-        if (layer.scrollX <= -scaledW)
+        while (layer.scrollX <= -scaledW)
             layer.scrollX += scaledW;
 
         // Ve du so ban de phu kin toan man hinh
@@ -173,7 +206,7 @@ void drawParallaxBackground() {
 
 // --- CAC HAM LIEN QUAN DEN MAIN MENU ---
 void drawMenu(const UIState& ui) {
-    drawParallaxBackground();
+    drawParallaxBackground(1.0f);
     drawMenuButton(ui);
 }
 
@@ -238,61 +271,133 @@ void drawMenuButton(const UIState& ui) {
 }
 
 
+
+void drawModeSelectionScreen(const UIState& ui) {
+    drawParallaxBackground(1.0f);
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+    
+    float startY = screenH * 0.4f;
+    float gap = 80.0f;
+    const char* modes[] = { "Player vs Player", "Player vs Environment (Bot)" };
+    
+    DrawTextEx(font8bit, "SELECT GAME MODE", { screenW / 2.0f - 200, screenH * 0.2f }, 50, 2, buttonYellow);
+    
+    for (int i = 0; i < 2; i++) {
+        bool isSelected = (i == ui.modeMenuIndex);
+        Color textColor = isSelected ? buttonDarkPurple : buttonYellow;
+        Color bgColor = isSelected ? buttonYellow : BLANK;
+        
+        float posY = startY + i * gap;
+        DrawRectangle(screenW / 2.0f - 300, posY - 5, 600, 50, bgColor);
+        DrawTextEx(font8bit, modes[i], { screenW / 2.0f - 280, posY + 5 }, 35, 2, textColor);
+    }
+}
+
 // --- CAC HAM LIEN QUAN DEN CHARACTER SELECTION ---
 void drawCharSelection(const UIState& ui) {
-    drawParallaxBackground();
+    drawParallaxBackground(1.0f);
 
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
-
-    // Ve ai dang chon
-    float headerFontSize = 0.15 * screenH; // 15% chieu cao man hinh
-    if (ui.isSelectingX) {
-        DrawTextEx(font8bit, "X is choosing...", { 0.02f*screenW , 0 }, headerFontSize, 0.0, buttonYellow);
-    }
-    else {
-        DrawTextEx(font8bit, "O is choosing...", { 0.02f * screenW , 0 }, headerFontSize, 0.0, buttonYellow);
+    
+    // Glassmorphism panel
+    float panelW = screenW * 0.7f;
+    float panelH = screenH * 0.7f;
+    float panelX = (screenW - panelW) / 2.0f;
+    float panelY = (screenH - panelH) / 2.0f;
+    
+    DrawRectangle(panelX, panelY, panelW, panelH, Fade(BLACK, 0.7f));
+    DrawRectangleLinesEx({panelX, panelY, panelW, panelH}, 4, buttonYellow);
+    
+    // Header
+    const char* headerText = ui.isSelectingX ? "PLAYER X IS CHOOSING" : "PLAYER O IS CHOOSING";
+    Color headerColor = ui.isSelectingX ? RED : BLUE;
+    float headerFontSize = screenH * 0.08f;
+    Vector2 headerSize = MeasureTextEx(font8bit, headerText, headerFontSize, 2);
+    DrawTextEx(font8bit, headerText, { screenW/2.0f - headerSize.x/2.0f, panelY + screenH*0.05f }, headerFontSize, 2, headerColor);
+    
+    // Character Box Placeholder
+    float boxW = panelW * 0.3f;
+    float boxH = panelH * 0.4f;
+    float boxX = screenW/2.0f - boxW/2.0f;
+    float boxY = panelY + screenH*0.18f;
+    
+    Color charColor;
+    const char* charName;
+    const char* charDesc;
+    
+    switch (ui.characterMenuIndex) {
+        case 1:
+            charName = "ASSASSIN";
+            charColor = Fade(PURPLE, 0.8f);
+            charDesc = "Skill: DMG increases significantly as the round goes on";
+            break;
+        case 2:
+            charName = "BRUISER";
+            charColor = Fade(ORANGE, 0.8f);
+            charDesc = "Skill: DMG is always a moderately high constant";
+            break;
+        case 3:
+        default:
+            charName = "VAMPIRE";
+            charColor = Fade(DARKGREEN, 0.8f);
+            charDesc = "Skill: Heals a small, random amount of HP when attack";
+            break;
     }
     
-
-    // Ve chon nhan vat gi
-    float charNameFontSize = 0.1 * screenH; // 10% chieu cao man hinh
-    float charDescFontSize = 0.05 * screenH; // 5% chieu cao man hinh
-
-    Vector2 measureName, measureDesc;
-    switch (abs(ui.characterMenuIndex % 3)) {
-    case 0:
-        measureName = MeasureTextEx(font8bit, "ASSASSIN", charNameFontSize, 0.0);
-        measureDesc = MeasureTextEx(font8bit, "Skill: Output damage increase significantly as the round goes on", charDescFontSize, 0.0f);
-        DrawTextEx(font8bit, "ASSASSIN", { screenW / 2 - measureName.x / 2, screenH / 2 - measureName.y / 2 }, charNameFontSize, 0.0, buttonYellow);
-        DrawTextEx(font8bit, "Skill: Output damage increase significantly as the round goes on", 
-            { screenW / 2 - measureDesc.x / 2, screenH / 2 + measureName.y / 2 }, charDescFontSize, 0.0, BLACK);
-        break;
-    case 1:
-        measureName = MeasureTextEx(font8bit, "BRUISER", charNameFontSize, 0.0);
-        measureDesc = MeasureTextEx(font8bit, "Skill: Output damage is a moderately high constant value", charDescFontSize, 0.0f);
-        DrawTextEx(font8bit, "BRUISER", { screenW / 2 - measureName.x / 2, screenH / 2 - measureName.y / 2 }, charNameFontSize, 0.0, buttonYellow);
-        DrawTextEx(font8bit, "Skill: Output damage is always a moderately high constant",
-            { screenW / 2 - measureDesc.x / 2, screenH / 2 + measureName.y / 2 }, charDescFontSize, 0.0, BLACK);
-        break;
-    case 2:
-        measureName = MeasureTextEx(font8bit, "VAMPIRE", charNameFontSize, 0.0);
-        measureDesc = MeasureTextEx(font8bit, "Skill: Heals a small, random amount of HP when attack", charDescFontSize, 0.0f);
-        DrawTextEx(font8bit, "VAMPIRE", { screenW / 2 - measureName.x / 2, screenH / 2 - measureName.y / 2 }, charNameFontSize, 0.0, buttonYellow);
-        DrawTextEx(font8bit, "Skill: Heals a small, random amount of HP when attack",
-            { screenW / 2 - measureDesc.x / 2, screenH / 2 + measureName.y / 2 }, charDescFontSize, 0.0, BLACK);
-        break;
-
+    // Draw box
+    DrawRectangle(boxX, boxY, boxW, boxH, charColor);
+    DrawRectangleLinesEx({boxX, boxY, boxW, boxH}, 5, WHITE); // Khung net dut
+    DrawTextEx(font8bit, "?", { boxX + boxW/2.0f - 20, boxY + boxH/2.0f - 40 }, 80, 2, Fade(WHITE, 0.5f));
+    
+    // Char Name
+    float nameFontSize = screenH * 0.05f;
+    Vector2 nameSize = MeasureTextEx(font8bit, charName, nameFontSize, 2);
+    DrawTextEx(font8bit, charName, { screenW/2.0f - nameSize.x/2.0f, boxY + boxH + screenH*0.02f }, nameFontSize, 2, buttonYellow);
+    
+    // Description
+    float descFontSize = screenH * 0.035f;
+    Vector2 descSize = MeasureTextEx(font8bit, charDesc, descFontSize, 1);
+    DrawTextEx(font8bit, charDesc, { screenW/2.0f - descSize.x/2.0f, boxY + boxH + screenH*0.09f }, descFontSize, 1, Fade(WHITE, 0.9f));
+    
+    // Indicators (● ● ○)
+    float dotGap = 40.0f;
+    float dotsStartX = screenW/2.0f - dotGap;
+    float dotsY = panelY + panelH - screenH*0.08f;
+    for (int i=1; i<=3; i++) {
+        if (i == ui.characterMenuIndex)
+            DrawCircle(dotsStartX + (i-1)*dotGap, dotsY, 10.0f, buttonYellow);
+        else
+            DrawCircleLines(dotsStartX + (i-1)*dotGap, dotsY, 10.0f, Fade(WHITE, 0.5f));
     }
-
+    
+    // Footer Navigation
+    const char* footerText = "LEFT/RIGHT: Navigate  |  ENTER: Confirm  |  ESC: Back";
+    float footerFontSize = screenH * 0.025f;
+    Vector2 footerSize = MeasureTextEx(font8bit, footerText, footerFontSize, 1);
+    DrawTextEx(font8bit, footerText, { screenW/2.0f - footerSize.x/2.0f, panelY + panelH + screenH*0.02f }, footerFontSize, 1, Fade(WHITE, 0.6f));
 }
 
+void drawGameIntro(const MatchState& match, const UIState& ui) {
+    float totalTime = 3.5f;
+    float totalDistance = (float)GetScreenWidth() * 5.0f;
+    float p = ui.roundOverTimer / totalTime;
+    if (p > 1.0f) p = 1.0f;
+    
+    float ep_prime = 30.0f * p * p * (1.0f - p) * (1.0f - p);
+    float velocity = ep_prime * totalDistance / totalTime;
+    float speedMultiplier = velocity / 30.0f;
 
+    drawParallaxBackground(speedMultiplier);
+    drawCharacters(ui.introCamX);
+}
 
 // Nhom ban co
 void drawCaroGame(const MatchState& match, const UIState& ui) {
     
-    drawParallaxBackground();
+    drawParallaxBackground(0.0f); // Lock background
+    drawCharacters(0.0f);         // Ve character o trang thai Dung im
 
     // Vẽ hai bên trước, vẽ bàn cờ ở giữa sau
     drawStatusPanel(match);
@@ -393,7 +498,8 @@ void drawGameOver(const MatchState& match, const UIState& ui) {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    drawParallaxBackground();
+    drawParallaxBackground(0.0f); // Lock background
+    drawCharacters(0.0f);
 
     Vector2 measure = MeasureTextEx(font8bit, "GAME OVER", 0.25f*screenH, 0.0);
     Vector2 measureStat= MeasureTextEx(font8bit, "X WINS", 0.15f*screenH, 0.0f);
@@ -404,7 +510,7 @@ void drawGameOver(const MatchState& match, const UIState& ui) {
 }
 
 void drawLoadGameScreen(const UIState& ui, const std::vector<std::string>& saveFiles) {
-    drawParallaxBackground();
+    drawParallaxBackground(1.0f);
     
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
@@ -431,5 +537,5 @@ void drawLoadGameScreen(const UIState& ui, const std::vector<std::string>& saveF
 
 void drawSettingsScreen(const UIState& ui) {
     // mock
-    drawParallaxBackground();
+    drawParallaxBackground(1.0f);
 }
