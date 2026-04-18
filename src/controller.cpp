@@ -1,6 +1,7 @@
 #include "controller.h"
 #include "view.h"
 #include "save_manager.h"
+#include <ctime>
 
 
 // handleMainMenuInput:
@@ -121,6 +122,41 @@ void handleCharSelectionInput(MatchState& match, UIState& ui) {
 // Enter để đặt quân tại ô đang trỏ
 // Sau mỗi nước đi hợp lệ kiểm tra kết quả round rồi match
 void handleGameplayInput(MatchState& match, UIState& ui) {
+    if (ui.isPaused) {
+        if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP)) {
+            if (ui.pauseMenuIndex > 0) ui.pauseMenuIndex--;
+        }
+        if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN)) {
+            if (ui.pauseMenuIndex < 1) ui.pauseMenuIndex++;
+        }
+        if (IsKeyPressed(KEY_ENTER)) {
+            if (ui.pauseMenuIndex == 0) {
+                // Save game
+                std::time_t t = std::time(nullptr);
+                std::tm* tm = std::localtime(&t);
+                char buffer[64];
+                std::strftime(buffer, sizeof(buffer), "save_%Y%m%d_%H%M%S.txt", tm);
+                saveGame(match, buffer);
+                ui.isPaused = false; // resumes game after save
+            } else if (ui.pauseMenuIndex == 1) {
+                // Exit
+                ui.isPaused = false;
+                ui.currentScreen = MAIN_MENU;
+                ui.mainMenuIndex = 0;
+            }
+        }
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            ui.isPaused = false;
+        }
+        return;
+    }
+
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        ui.isPaused = true;
+        ui.pauseMenuIndex = 0;
+        return;
+    }
+
     // Di chuyển con trỏ
     // W/S/up/down sẽ là cursorY vì di chuyển theo chiều dọc (col)
     if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))

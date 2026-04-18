@@ -402,6 +402,46 @@ void drawCaroGame(const MatchState& match, const UIState& ui) {
     // Vẽ hai bên trước, vẽ bàn cờ ở giữa sau
     drawStatusPanel(match);
     drawBoard(match, ui);
+    
+    // Hien thi Pause Menu de len khung game
+    if (ui.isPaused) {
+        int screenW = GetScreenWidth();
+        int screenH = GetScreenHeight();
+        
+        // Lam toi toan man hinh
+        DrawRectangle(0, 0, screenW, screenH, Fade(BLACK, 0.7f));
+        
+        float panelW = 400; // Hoac screenW * 0.35f
+        float panelH = 300; // Hoac screenH * 0.40f
+        float panelX = screenW / 2.0f - panelW / 2.0f;
+        float panelY = screenH / 2.0f - panelH / 2.0f;
+        
+        // Vẽ panel
+        DrawRectangle(panelX, panelY, panelW, panelH, buttonDarkPurple);
+        DrawRectangleLinesEx({panelX, panelY, panelW, panelH}, 4, buttonYellow);
+        
+        // Header
+        const char* title = "PAUSED";
+        float titleSize = 50.0f;
+        Vector2 titleMeasure = MeasureTextEx(font8bit, title, titleSize, 2);
+        DrawTextEx(font8bit, title, { screenW / 2.0f - titleMeasure.x / 2.0f, panelY + 30 }, titleSize, 2, WHITE);
+        
+        // Menu options
+        const char* options[] = {"Save Game", "Exit to Menu"};
+        float gap = 70.0f;
+        float startY = panelY + 120.0f;
+        
+        for (int i=0; i<2; ++i) {
+            Color color = (i == ui.pauseMenuIndex) ? buttonDarkPurple : buttonYellow;
+            Color bgColor = (i == ui.pauseMenuIndex) ? buttonYellow : BLANK;
+            
+            float optY = startY + i * gap;
+            DrawRectangle(screenW / 2.0f - 150, optY - 10, 300, 50, bgColor);
+            
+            Vector2 optSize = MeasureTextEx(font8bit, options[i], 30.0f, 2);
+            DrawTextEx(font8bit, options[i], { screenW / 2.0f - optSize.x / 2.0f, optY }, 30.0f, 2, color);
+        }
+    }
 }
 
 void drawBoard(const MatchState& match, const UIState& ui) {

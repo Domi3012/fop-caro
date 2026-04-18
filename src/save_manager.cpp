@@ -16,13 +16,16 @@ bool saveGame(const MatchState& match, const std::string& filename) {
     std::ofstream out("saves/" + filename);
     if (!out.is_open()) return false;
 
+    std::string nameX = match.playerX.Name.empty() ? "Player 1" : match.playerX.Name;
+    std::string nameO = match.playerO.Name.empty() ? "Player 2" : match.playerO.Name;
+
     // Lưu thông tin Player X
-    out << match.playerX.Name << "\n" 
+    out << nameX << "\n" 
         << (int)match.playerX.character << " " 
         << match.playerX.health << "\n";
 
     // Lưu thông tin Player O
-    out << match.playerO.Name << "\n" 
+    out << nameO << "\n" 
         << (int)match.playerO.character << " " 
         << match.playerO.health << "\n";
 

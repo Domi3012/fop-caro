@@ -41,6 +41,10 @@ struct UIState {
 	// Settings menu
 	int settingsMenuIndex;
 
+	// Pause menu
+	bool isPaused = false;
+	int pauseMenuIndex = 0;
+
 	// Round over timer
 	float roundOverTimer = 0.0f;
 
