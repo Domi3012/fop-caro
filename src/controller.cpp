@@ -53,13 +53,13 @@ void handleMainMenuInput(UIState& ui) {
 // X chọn xong -> O chọn
 // O chọn xong -> initMatch và chuyển sang GAME_BOARD
 void handleCharSelectionInput(MatchState& match, UIState& ui) {
-    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT))
     {
         if (ui.characterMenuIndex > 1)
             ui.characterMenuIndex--;
     }
 
-    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT))
     {
         if (ui.characterMenuIndex < 3) // 3 nhân vật: index 1,2,3
             ui.characterMenuIndex++;
@@ -132,10 +132,14 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
         if (IsKeyPressed(KEY_ENTER)) {
             if (ui.pauseMenuIndex == 0) {
                 // Save game
-                std::time_t t = std::time(nullptr);
-                std::tm* tm = std::localtime(&t);
+                time_t t = time(NULL);
+                struct tm timeinfo;
+                localtime_s(&timeinfo, &t);
+
                 char buffer[64];
-                std::strftime(buffer, sizeof(buffer), "save_%Y%m%d_%H%M%S.txt", tm);
+                // Thêm dấu & trước timeinfo ở dòng dưới đây:
+                std::strftime(buffer, sizeof(buffer), "save_%Y%m%d_%H%M%S.txt", &timeinfo);
+
                 saveGame(match, buffer);
                 ui.isPaused = false; // resumes game after save
             } else if (ui.pauseMenuIndex == 1) {
