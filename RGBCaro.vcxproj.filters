@@ -33,13 +33,13 @@
     <ClInclude Include="src\view.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="save_manager.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\audio_manager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\bot_ai.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\save_manager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
