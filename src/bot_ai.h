@@ -10,7 +10,7 @@ enum BotDifficulty {
 };
 
 // Hàm tính điểm cho getBestMove. Với mỗi lần bot đánh, ta sẽ tính điểm cho mỗi ô và bot sẽ đánh ô có điểm cao nhất.
-long long evaluateCell(const RoundState& rs, int x, int y, PlayerType botType)
+long long evaluateCell(const RoundState& rs, int x, int y, PlayerType botType);
 
 // Hàm tính toán và trả về tọa độ (X, Y) tốt nhất cho Bot
 // Hàm này KHÔNG làm thay đổi bàn cờ, nó chỉ đọc dữ liệu và "gợi ý" nước đi
