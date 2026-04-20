@@ -1,8 +1,29 @@
 #include "controller.h"
 #include "view.h"
 #include "save_manager.h"
+#include "audio_manager.h"
 #include <ctime>
 
+
+// thêm helper đồng bộ nhạc nền theo màn hình hiện tại
+static void syncAudioForScreen(const UIState& ui) {
+    switch (ui.currentScreen) {
+    case MAIN_MENU:
+    case MODE_SELECTION:
+    case CHARACTER_SELECTION:
+    case LOAD_GAME:
+    case SETTINGS:
+        playMusic(BGM_MENU);
+        break;
+
+    case GAME_INTRO:
+    case GAME_BOARD:
+    case ROUND_OVER:
+    case GAME_OVER:
+        playMusic(BGM_BATTLE);
+        break;
+    }
+}
 
 // handleMainMenuInput:
 // Lên xuống để di chuyển mainMenuIndex
@@ -10,37 +31,45 @@
 void handleMainMenuInput(UIState& ui) {
     if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
     {
-        if (ui.mainMenuIndex > 0)
+        if (ui.mainMenuIndex > 0) {
             ui.mainMenuIndex--;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển menu chính
+        }
     }
 
     if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
     {
-        if (ui.mainMenuIndex < 3) // 4 options: index 0,1,2,3 
+        if (ui.mainMenuIndex < 3) { // 4 options: index 0,1,2,3 
             ui.mainMenuIndex++;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển menu chính
+        }
     }
 
     if (IsKeyPressed(KEY_ENTER))
     {
         //Thêm các option sau tại đây
         switch (ui.mainMenuIndex) {
-        // Option 0: Start Game
+            // Option 0: Start Game
         case(0):
             ui.currentScreen = MODE_SELECTION;
             ui.modeMenuIndex = 0;
+            playSFX(SFX_CLICK); // thêm âm thanh xác nhận Start Game
             break;
         case(1):
             ui.currentScreen = LOAD_GAME;
             ui.loadMenuIndex = 0;
+            playSFX(SFX_CLICK); // thêm âm thanh xác nhận Load Game
             break;
-        // Option 2: Settings
+            // Option 2: Settings
         case(2):
             ui.currentScreen = SETTINGS;
             ui.settingsMenuIndex = 0;
+            playSFX(SFX_CLICK); // thêm âm thanh xác nhận Settings
             break;
-        // Option 3: Exit game
+            // Option 3: Exit game
         case(3):
             ui.shouldExit = true;
+            playSFX(SFX_CLICK); // thêm âm thanh xác nhận thoát game
             break;
         }
     }
@@ -55,14 +84,18 @@ void handleMainMenuInput(UIState& ui) {
 void handleCharSelectionInput(MatchState& match, UIState& ui) {
     if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT))
     {
-        if (ui.characterMenuIndex > 1)
+        if (ui.characterMenuIndex > 1) {
             ui.characterMenuIndex--;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển chọn nhân vật
+        }
     }
 
     if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT))
     {
-        if (ui.characterMenuIndex < 3) // 3 nhân vật: index 1,2,3
+        if (ui.characterMenuIndex < 3) { // 3 nhân vật: index 1,2,3
             ui.characterMenuIndex++;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển chọn nhân vật
+        }
     }
 
     if (IsKeyPressed(KEY_ENTER))
@@ -84,6 +117,7 @@ void handleCharSelectionInput(MatchState& match, UIState& ui) {
             // Chuyển sang cho O chọn
             ui.isSelectingX = false;
             ui.characterMenuIndex = 1;
+            playSFX(SFX_CLICK); // thêm âm thanh xác nhận nhân vật X
         }
         else
         {
@@ -103,6 +137,7 @@ void handleCharSelectionInput(MatchState& match, UIState& ui) {
 
             // Bat dau intro animation truoc khi vao GAME_BOARD
             startGameIntro(ui);
+            playSFX(SFX_CLICK); // thêm âm thanh xác nhận nhân vật O và bắt đầu trận
         }
     }
 
@@ -113,6 +148,7 @@ void handleCharSelectionInput(MatchState& match, UIState& ui) {
         ui.mainMenuIndex = 0;
         ui.isSelectingX = true;
         ui.characterMenuIndex = 1;
+        playSFX(SFX_CLICK); // thêm âm thanh quay lại main menu từ chọn nhân vật
     }
 }
 
@@ -124,10 +160,16 @@ void handleCharSelectionInput(MatchState& match, UIState& ui) {
 void handleGameplayInput(MatchState& match, UIState& ui) {
     if (ui.isPaused) {
         if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP)) {
-            if (ui.pauseMenuIndex > 0) ui.pauseMenuIndex--;
+            if (ui.pauseMenuIndex > 0) {
+                ui.pauseMenuIndex--;
+                playSFX(SFX_CLICK); // thêm âm thanh di chuyển pause menu
+            }
         }
         if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN)) {
-            if (ui.pauseMenuIndex < 1) ui.pauseMenuIndex++;
+            if (ui.pauseMenuIndex < 1) {
+                ui.pauseMenuIndex++;
+                playSFX(SFX_CLICK); // thêm âm thanh di chuyển pause menu
+            }
         }
         if (IsKeyPressed(KEY_ENTER)) {
             if (ui.pauseMenuIndex == 0) {
@@ -142,15 +184,19 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
 
                 saveGame(match, buffer);
                 ui.isPaused = false; // resumes game after save
-            } else if (ui.pauseMenuIndex == 1) {
+                playSFX(SFX_CLICK); // thêm âm thanh lưu game trong pause menu
+            }
+            else if (ui.pauseMenuIndex == 1) {
                 // Exit
                 ui.isPaused = false;
                 ui.currentScreen = MAIN_MENU;
                 ui.mainMenuIndex = 0;
+                playSFX(SFX_CLICK); // thêm âm thanh thoát về menu từ pause menu
             }
         }
         if (IsKeyPressed(KEY_ESCAPE)) {
             ui.isPaused = false;
+            playSFX(SFX_CLICK); // thêm âm thanh tiếp tục game từ pause menu
         }
         return;
     }
@@ -158,6 +204,7 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
     if (IsKeyPressed(KEY_ESCAPE)) {
         ui.isPaused = true;
         ui.pauseMenuIndex = 0;
+        playSFX(SFX_CLICK); // thêm âm thanh mở pause menu
         return;
     }
 
@@ -165,8 +212,9 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
     // W/S/up/down sẽ là cursorY vì di chuyển theo chiều dọc (col)
     if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
     {
-        if (ui.cursorY > 0){
+        if (ui.cursorY > 0) {
             ui.cursorY--;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển con trỏ dọc
         }
     }
 
@@ -174,6 +222,7 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
     {
         if (ui.cursorY < BOARD_SIZE - 1) {
             ui.cursorY++;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển con trỏ dọc
         }
     }
     // A/D/right/left sẽ là cursorX vì di chuyển theo chiều dọc (col)
@@ -181,6 +230,7 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
     {
         if (ui.cursorX > 0) {
             ui.cursorX--;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển con trỏ ngang
         }
     }
 
@@ -188,6 +238,7 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
     {
         if (ui.cursorX < BOARD_SIZE - 1) {
             ui.cursorX++;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển con trỏ ngang
         }
     }
 
@@ -200,6 +251,7 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
             return;
 
         makeMove(round, ui.cursorY, ui.cursorX);
+        playSFX(SFX_PLACE); // thêm âm thanh đặt quân hợp lệ
 
         RoundResult rr = checkRoundResult(round, ui.cursorY, ui.cursorX);
 
@@ -211,16 +263,22 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
             Player& attacker = (rr == X_WINS) ? match.playerX : match.playerO;
             Player& defender = (rr == X_WINS) ? match.playerO : match.playerX;
             executeAttack(attacker, defender, round.turnCount);
+            playSFX(SFX_ATTACK); // thêm âm thanh tấn công sau khi thắng round
+            if (attacker.character == VAMPIRE)
+                playSFX(SFX_HEAL); // thêm âm thanh hồi máu cho Vampire
 
             RoundResult mr = checkMatchResult(match);
             if (mr == X_WINS || mr == O_WINS)
             {
                 match.matchResult = mr;
                 ui.currentScreen = GAME_OVER;
+                playSFX(SFX_WIN); // thêm âm thanh xác nhận thắng round quyết định
+                playSFX(SFX_GAME_OVER); // thêm âm thanh kết thúc trận
             }
             else
             {
                 ui.currentScreen = ROUND_OVER;
+                playSFX(SFX_WIN); // thêm âm thanh thắng round
             }
         }
         else if (rr == DRAW)
@@ -228,6 +286,7 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
             round.result = DRAW;
             match.countRoundsPlayed++;
             ui.currentScreen = ROUND_OVER;
+            playSFX(SFX_CLICK); // thêm âm thanh kết thúc round hòa
         }
         // ONGOING: không làm gì, tiếp tục chơi
     }
@@ -249,6 +308,7 @@ void handleRoundOverInput(MatchState& match, UIState& ui) {
     {
         match.matchResult = mr;
         ui.currentScreen = GAME_OVER;
+        playSFX(SFX_GAME_OVER); // thêm âm thanh vào màn game over
     }
     else
     {
@@ -267,11 +327,13 @@ void handleGameOverInput(MatchState& match, UIState& ui) {
         ui.mainMenuIndex = 0;
         ui.isSelectingX = true;
         ui.characterMenuIndex = 1;
+        playSFX(SFX_CLICK); // thêm âm thanh xác nhận quay lại main menu từ game over
     }
 
     if (IsKeyPressed(KEY_ESCAPE))
     {
         ui.currentScreen = MAIN_MENU; // Thay vì CloseWindow()
+        playSFX(SFX_CLICK); // thêm âm thanh quay lại main menu từ game over bằng ESC
     }
 
     (void)match;
@@ -284,6 +346,7 @@ void startGameIntro(UIState& ui) {
     ui.introCamX = (float)GetScreenWidth() * 5.0f; // Bat dau xa x5
     ui.roundOverTimer = 0.0f; // Su dung tam time nay cho intro
     ui.currentScreen = GAME_INTRO;
+    playMusic(BGM_BATTLE); // thêm nhạc nền battle khi bắt đầu intro
 }
 
 
@@ -297,6 +360,7 @@ void startMatch(UIState& ui) {
     ui.roundOverTimer = 0.0f; // luôn reset timer khi bắt đầu game/round
     ui.introCamX = 0.0f;
     ui.currentScreen = GAME_BOARD;
+    playMusic(BGM_BATTLE); // thêm nhạc nền battle khi vào game board
 }
 
 // handleModeSelectionInput:
@@ -304,20 +368,28 @@ void startMatch(UIState& ui) {
 void handleModeSelectionInput(UIState& ui) {
     if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT) ||
         IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP)) {
-        if (ui.modeMenuIndex > 0) ui.modeMenuIndex--;
+        if (ui.modeMenuIndex > 0) {
+            ui.modeMenuIndex--;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển chọn mode
+        }
     }
     if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT) ||
         IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN)) {
-        if (ui.modeMenuIndex < 1) ui.modeMenuIndex++;
+        if (ui.modeMenuIndex < 1) {
+            ui.modeMenuIndex++;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển chọn mode
+        }
     }
     if (IsKeyPressed(KEY_ENTER)) {
         ui.isPVE = (ui.modeMenuIndex == 1);
         ui.currentScreen = CHARACTER_SELECTION;
         ui.isSelectingX = true;
         ui.characterMenuIndex = 1;
+        playSFX(SFX_CLICK); // thêm âm thanh xác nhận mode chơi
     }
     if (IsKeyPressed(KEY_ESCAPE)) {
         ui.currentScreen = MAIN_MENU;
+        playSFX(SFX_CLICK); // thêm âm thanh quay lại main menu từ chọn mode
     }
 }
 
@@ -328,15 +400,16 @@ void handleGameIntroInput(MatchState& match, UIState& ui) {
     if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
         ui.introCamX = 0.0f;
         startMatch(ui);
+        playSFX(SFX_CLICK); // thêm âm thanh skip intro
         return;
     }
 
     float dt = GetFrameTime();
     ui.roundOverTimer += dt;
-    
+
     float totalTime = 3.5f; // Epic intro keo dai 3.5s
     float totalDistance = (float)GetScreenWidth() * 5.0f;
-    
+
     // Su dung Smootherstep ease-in-out: E'(p) = 30 * p^2 * (1-p)^2
     float p = ui.roundOverTimer / totalTime;
     if (p >= 1.0f) {
@@ -344,12 +417,12 @@ void handleGameIntroInput(MatchState& match, UIState& ui) {
         startMatch(ui);
         return;
     }
-    
+
     float ep_prime = 30.0f * p * p * (1.0f - p) * (1.0f - p);
     float velocity = ep_prime * totalDistance / totalTime;
 
     ui.introCamX -= velocity * dt;
-    
+
     if (ui.introCamX <= 0.0f) {
         ui.introCamX = 0.0f;
         startMatch(ui);
@@ -371,38 +444,47 @@ void handleInput(MatchState& match, UIState& ui) {
         // Khi vừa chuyển vào màn LOAD_GAME, refresh danh sách file save
         if (ui.currentScreen == LOAD_GAME)
             cachedSaveFiles = getSaveFilesList();
+        syncAudioForScreen(ui); // thêm đồng bộ nhạc nền sau khi xử lý main menu
         break;
 
     case MODE_SELECTION:
         handleModeSelectionInput(ui);
+        syncAudioForScreen(ui); // thêm đồng bộ nhạc nền sau khi xử lý chọn mode
         break;
 
     case CHARACTER_SELECTION:
         handleCharSelectionInput(match, ui);
+        syncAudioForScreen(ui); // thêm đồng bộ nhạc nền sau khi xử lý chọn nhân vật
         break;
 
     case GAME_INTRO:
         handleGameIntroInput(match, ui);
+        syncAudioForScreen(ui); // thêm đồng bộ nhạc nền sau khi xử lý intro
         break;
 
     case LOAD_GAME:
         handleLoadGameInput(match, ui, cachedSaveFiles);
+        syncAudioForScreen(ui); // thêm đồng bộ nhạc nền sau khi xử lý load game
         break;
 
     case SETTINGS:
         handleSettingsInput(ui);
+        syncAudioForScreen(ui); // thêm đồng bộ nhạc nền sau khi xử lý settings
         break;
 
     case GAME_BOARD:
         handleGameplayInput(match, ui);
+        syncAudioForScreen(ui); // thêm đồng bộ nhạc nền sau khi xử lý gameplay
         break;
 
     case ROUND_OVER:
         handleRoundOverInput(match, ui);
+        syncAudioForScreen(ui); // thêm đồng bộ nhạc nền sau khi xử lý round over
         break;
 
     case GAME_OVER:
         handleGameOverInput(match, ui);
+        syncAudioForScreen(ui); // thêm đồng bộ nhạc nền sau khi xử lý game over
         break;
     }
 }
@@ -412,16 +494,23 @@ void handleLoadGameInput(MatchState& match, UIState& ui, const std::vector<std::
     if (saveFiles.empty()) {
         if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER)) {
             ui.currentScreen = MAIN_MENU;
+            playSFX(SFX_CLICK); // thêm âm thanh thoát load game khi không có save
         }
         return;
     }
 
     if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP)) {
-        if (ui.loadMenuIndex > 0) ui.loadMenuIndex--;
+        if (ui.loadMenuIndex > 0) {
+            ui.loadMenuIndex--;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển danh sách save
+        }
     }
 
     if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN)) {
-        if (ui.loadMenuIndex < (int)saveFiles.size() - 1) ui.loadMenuIndex++;
+        if (ui.loadMenuIndex < (int)saveFiles.size() - 1) {
+            ui.loadMenuIndex++;
+            playSFX(SFX_CLICK); // thêm âm thanh di chuyển danh sách save
+        }
     }
 
     // Chọn file để load
@@ -429,12 +518,14 @@ void handleLoadGameInput(MatchState& match, UIState& ui, const std::vector<std::
         // Dùng startMatch() để thống nhất flow chuyển sang GAME_BOARD
         if (loadGame(match, saveFiles[ui.loadMenuIndex])) {
             startMatch(ui);
+            playSFX(SFX_CLICK); // thêm âm thanh load game thành công
         }
     }
 
     // Bấm ESC để quay lại
     if (IsKeyPressed(KEY_ESCAPE)) {
         ui.currentScreen = MAIN_MENU;
+        playSFX(SFX_CLICK); // thêm âm thanh quay lại main menu từ load game
     }
 }
 
@@ -442,5 +533,6 @@ void handleSettingsInput(UIState& ui) {
     // Bấm ESC để quay lại Main Menu
     if (IsKeyPressed(KEY_ESCAPE)) {
         ui.currentScreen = MAIN_MENU;
+        playSFX(SFX_CLICK); // thêm âm thanh quay lại main menu từ settings
     }
 }
