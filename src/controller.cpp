@@ -155,6 +155,51 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
         return;
     }
 
+    if (ui.isPVE && match.currentRound.toMove == O && match.currentRound.result == ONGOING) {
+        
+        ui.botTimer += GetFrameTime(); // Đếm thời gian trôi qua
+
+        if (ui.botTimer >= 0.8f) {
+            // Nhờ AI tính toán nước đi tốt nhất
+            std::pair<int, int> botMove = getBestMove(match.currentRound, O, HARD);
+            int bRow = botMove.first;
+            int bCol = botMove.second;
+
+            // Đặt quân của Bot lên bàn cờ
+            makeMove(match.currentRound, bRow, bCol);
+
+            // Kiểm tra xem sau nước đi này Bot có thắng không
+            RoundResult rr = checkRoundResult(match.currentRound, bRow, bCol);
+
+            if (rr == X_WINS || rr == O_WINS || rr == DRAW) {
+                // Nếu kết thúc round (Bot thắng hoặc Hòa)
+                match.currentRound.result = rr;
+                match.countRoundsPlayed++;
+
+                if (rr != DRAW) {
+                    // Bot (O) thắng thì tấn công người chơi (X)
+                    executeAttack(match.playerO, match.playerX, match.currentRound.turnCount);
+                }
+
+                // Kiểm tra xem máu người chơi đã về 0 chưa để kết thúc Match
+                RoundResult mr = checkMatchResult(match);
+                if (mr != ONGOING) {
+                    match.matchResult = mr;
+                    ui.currentScreen = GAME_OVER;
+                } else {
+                    ui.currentScreen = ROUND_OVER;
+                }
+            }
+
+            // Reset timer để lượt sau Bot lại đợi tiếp
+            ui.botTimer = 0.0f;
+        }
+        
+        //  Khi đến lượt Bot, ta return để 
+        // người chơi không thể nhấn phím điều khiển con trỏ hay đặt quân hộ Bot.
+        return; 
+    }
+
     if (IsKeyPressed(KEY_ESCAPE)) {
         ui.isPaused = true;
         ui.pauseMenuIndex = 0;
