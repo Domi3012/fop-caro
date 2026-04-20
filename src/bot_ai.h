@@ -9,6 +9,9 @@ enum BotDifficulty {
     HARD    // Khó: Heuristic toàn diện (chấm điểm công/thủ phức tạp) hoặc dùng Minimax Alpha-Beta độ sâu thấp.
 };
 
+// Hàm tính điểm cho getBestMove. Với mỗi lần bot đánh, ta sẽ tính điểm cho mỗi ô và bot sẽ đánh ô có điểm cao nhất.
+long long evaluateCell(const RoundState& rs, int x, int y, PlayerType botType);
+
 // Hàm tính toán và trả về tọa độ (X, Y) tốt nhất cho Bot
 // Hàm này KHÔNG làm thay đổi bàn cờ, nó chỉ đọc dữ liệu và "gợi ý" nước đi
 std::pair<int, int> getBestMove(const RoundState& roundState, PlayerType botType, BotDifficulty difficulty);

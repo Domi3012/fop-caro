@@ -131,121 +131,47 @@ void makeMove(RoundState& roundState, int x, int y)
 // checkRoundResult:
 // kiểm tra sau mỗi nước đi xem round đã kết thúc chưa
 // điều kiện thắng: 5 quân liên tiếp
-RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int lastMoveY)
+// Khi phát hiện người thắng: lưu tọa độ 5 ô đó vào winningCells trong RoundState
+RoundResult checkRoundResult(RoundState& roundState, int lastMoveX, int lastMoveY)
 {
-    // xác định quân vừa đánh
     PlayerType player = roundState.board[lastMoveX][lastMoveY];
+    if (player == NONE) return ONGOING;
 
-    if (player == NONE)
-        return ONGOING;
+    // Các hướng kiểm tra: Ngang, Dọc, Chéo xuôi, Chéo ngược
+    int dx[] = {1, 0, 1, 1}; 
+    int dy[] = {0, 1, 1, -1};
 
-    int count;
-    int i;
+    for (int i = 0; i < 4; i++) {
+        int count = 1;
+        vector<pair<int, int>> cells = {{lastMoveX, lastMoveY}};
 
+        // Kiểm tra hướng tiến
+        int nx = lastMoveX + dx[i], ny = lastMoveY + dy[i];
+        while (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && roundState.board[nx][ny] == player) {
+            count++;
+            cells.push_back({nx, ny});
+            nx += dx[i]; ny += dy[i];
+        }
 
-    // =============================
-    // kiểm tra ngang
-    // =============================
-    count = 1;
+        // Kiểm tra hướng lùi
+        nx = lastMoveX - dx[i]; ny = lastMoveY - dy[i];
+        while (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE && roundState.board[nx][ny] == player) {
+            count++;
+            cells.push_back({nx, ny});
+            nx -= dx[i]; ny -= dy[i];
+        }
 
-    for (i = lastMoveX + 1; i < BOARD_SIZE && roundState.board[i][lastMoveY] == player; i++)
-        count++;
-
-    for (i = lastMoveX - 1; i >= 0 && roundState.board[i][lastMoveY] == player; i--)
-        count++;
-
-    if (count >= 5)
-    {
-        if (player == X) return X_WINS;
-        else return O_WINS;
+        if (count >= 5) {
+            // Chỉ lấy đúng 5 ô đầu tiên để highlight (hoặc cả chuỗi nếu muốn)
+            roundState.winningCells = cells; 
+            return (player == X) ? X_WINS : O_WINS;
+        }
     }
 
-
-    // =============================
-    // kiểm tra dọc
-    // =============================
-    count = 1;
-
-    for (i = lastMoveY + 1; i < BOARD_SIZE && roundState.board[lastMoveX][i] == player; i++)
-        count++;
-
-    for (i = lastMoveY - 1; i >= 0 && roundState.board[lastMoveX][i] == player; i--)
-        count++;
-
-    if (count >= 5)
-    {
-        if (player == X) return X_WINS;
-        else return O_WINS;
-    }
-
-
-    // =============================
-    // kiem tra cheo (top-left to bottom-right)
-    // =============================
-    count = 1;
-
-    int x = lastMoveX + 1;
-    int y = lastMoveY + 1;
-
-    while (x < BOARD_SIZE && y < BOARD_SIZE && roundState.board[x][y] == player)
-    {
-        count++;
-        x++;
-        y++;
-    }
-
-    x = lastMoveX - 1;
-    y = lastMoveY - 1;
-
-    while (x >= 0 && y >= 0 && roundState.board[x][y] == player)
-    {
-        count++;
-        x--;
-        y--;
-    }
-
-    if (count >= 5)
-    {
-        if (player == X) return X_WINS;
-        else return O_WINS;
-    }
-
-
-    // =============================
-    // kiểm tra chéo /
-    // =============================
-    count = 1;
-
-    x = lastMoveX + 1;
-    y = lastMoveY - 1;
-
-    while (x < BOARD_SIZE && y >= 0 && roundState.board[x][y] == player)
-    {
-        count++;
-        x++;
-        y--;
-    }
-
-    x = lastMoveX - 1;
-    y = lastMoveY + 1;
-
-    while (x >= 0 && y < BOARD_SIZE && roundState.board[x][y] == player)
-    {
-        count++;
-        x--;
-        y++;
-    }
-
-    if (count >= 5)
-    {
-        if (player == X) return X_WINS;
-        else return O_WINS;
-    }
-
-
-    // nếu bàn cờ đầy mà chưa ai thắng
-    if (roundState.turnCount == BOARD_SIZE * BOARD_SIZE)
+    // Xử lý kết quả HÒA: Nếu bàn cờ đầy mà không ai thắng
+    if (roundState.turnCount >= BOARD_SIZE * BOARD_SIZE) {
         return DRAW;
+    }
 
     return ONGOING;
 }
