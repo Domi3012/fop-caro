@@ -3,6 +3,7 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+#include <algorithm>
 
 namespace fs = std::filesystem;
 
@@ -92,12 +93,21 @@ bool loadGame(MatchState& match, const std::string& filename) {
 // Quét thư mục saves/
 std::vector<std::string> getSaveFilesList() {
     std::vector<std::string> files;
-    if (!fs::exists("saves")) return files;
 
-    for (const auto& entry : fs::directory_iterator("saves")) {
-        if (entry.is_regular_file()) {
+    if (!fs::exists("saves"))
+    {
+        return files;
+    }
+
+    for (const auto& entry : fs::directory_iterator("saves"))
+    {
+        if (entry.is_regular_file())
+        {
             files.push_back(entry.path().filename().string());
         }
     }
+
+    std::sort(files.begin(), files.end(), std::greater<std::string>());
+
     return files;
 }

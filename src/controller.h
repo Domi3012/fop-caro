@@ -39,7 +39,12 @@ struct UIState {
 	int loadMenuIndex;
 
 	// Settings menu
-	int settingsMenuIndex;
+	int settingsMenuIndex = 0;
+	float uiScale = 1.0f;
+	bool isFullscreen = true;
+	int resolutionIndex = 4;
+	int renderWidth = 1920;
+	int renderHeight = 1080;
 
 	// Pause menu
 	bool isPaused = false;
@@ -50,7 +55,10 @@ struct UIState {
 
 	// Intro animation: camera offset bat dau lon, giam dan ve 0
 	float introCamX = 0.0f;
+
+	
 };
+
 
 // === HANDLERS ===
 void handleMainMenuInput(UIState& ui);

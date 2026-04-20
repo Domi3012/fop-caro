@@ -336,3 +336,18 @@ void toggleSFXEnabled()
 
     applySFXVolume();
 }
+bool isMusicEnabled() {
+    return g_musicEnabled;
+}
+
+bool isSFXEnabled() {
+    return g_sfxEnabled;
+}
+
+float getMusicVolume() {
+    return g_musicVolume;
+}
+
+float getSFXVolume() {
+    return g_sfxVolume;
+}

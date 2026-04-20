@@ -5,63 +5,10 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include "audio_manager.h"
 
 using std::string;
 using std::vector;
-
-// Vài màu dùng chung
-
-const Color buttonYellow = GetColor(0xb8dbc0FF);
-const Color buttonDarkPurple = GetColor(0x1A2421FF);
-
-// Vài texture dùng chung
-static Font font8bit;
-
-// --- PARALLAX BACKGROUND ---
-// Tên file các layer rừng, xếp từ xa nhất (index 0) đến gần nhất (index 11)
-// Quy ước: số suffix càng nhỏ = càng gần = càng nhanh
-static const char* FOREST_LAYER_PATHS[] = {
-    "./assets/images/layered_forest/Layer_0011_0.png",  // xa nhất - chậm nhất
-    "./assets/images/layered_forest/Layer_0010_1.png",
-    "./assets/images/layered_forest/Layer_0009_2.png",
-    "./assets/images/layered_forest/Layer_0008_3.png",
-    "./assets/images/layered_forest/Layer_0007_Lights.png",
-    "./assets/images/layered_forest/Layer_0006_4.png",
-    "./assets/images/layered_forest/Layer_0005_5.png",
-    "./assets/images/layered_forest/Layer_0004_Lights.png",
-    "./assets/images/layered_forest/Layer_0003_6.png",
-    "./assets/images/layered_forest/Layer_0002_7.png",
-    "./assets/images/layered_forest/Layer_0001_8.png",
-    "./assets/images/layered_forest/Layer_0000_9.png",  // gần nhất - nhanh nhất
-};
-static const int FOREST_LAYER_COUNT = 12;
-
-struct ParallaxLayer {
-    Texture2D texture;
-    float scrollX;   // offset cuộn hiện tại (pixel, âm = đã cuộn sang trái)
-    float speed;     // pixel/giây
-};
-
-static ParallaxLayer forestLayers[FOREST_LAYER_COUNT];
-
-// Vẽ parallax background cho main menu, gọi mỗi frame
-void drawParallaxBackground(float speedMultiplier = 1.0f);
-
-// Declaration cua vai ham noi bo
-// main menu:
-void drawMenuButton(const UIState& ui);
-void drawMenu(const UIState& ui);
-void drawModeSelectionScreen(const UIState& ui);
-void drawGameIntro(const MatchState& match, const UIState& ui);
-// game caro:
-void drawCaroGame(const MatchState& match, const UIState& ui);
-void drawBoard(const MatchState& match, const UIState& ui);
-void drawStatusPanel(const MatchState& match); // Vẽ máu, tên nhân vật
-// char select
-void drawCharSelection(const UIState& ui);
-// game over
-void drawGameOver(const MatchState& match, const UIState& ui);
-
 
 // --- HAM RENDER TONG ---
 void renderGame(const MatchState& match, const UIState& ui) {
@@ -146,7 +93,30 @@ void unloadView() {
 
 }
 
+struct BoardLayout {
+    float boardPixelSize;
+    float cellSize;
+    float startX;
+    float startY;
+};
 
+static BoardLayout getBoardLayout(int screenW, int screenH) {
+    // Chừa chỗ cho panel trái/phải + turn banner phía trên
+    float reservedSide = screenW * 0.28f;
+    float reservedTop = screenH * 0.16f;
+    float reservedBottom = screenH * 0.08f;
+
+    float maxBoardW = screenW - reservedSide * 2.0f;
+    float maxBoardH = screenH - reservedTop - reservedBottom;
+
+    float boardPixelSize = std::min(maxBoardW, maxBoardH);
+    float cellSize = boardPixelSize / BOARD_SIZE;
+
+    float startX = (screenW - boardPixelSize) / 2.0f;
+    float startY = reservedTop + (maxBoardH - boardPixelSize) / 2.0f;
+
+    return { boardPixelSize, cellSize, startX, startY };
+}
 
 void drawCharacters(float shiftX) {
     int screenW = GetScreenWidth();
@@ -461,44 +431,36 @@ void drawCaroGame(const MatchState& match, const UIState& ui) {
 }
 
 void drawBoard(const MatchState& match, const UIState& ui) {
-    
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    // Responsive: Bàn cờ chiếm 80% chiều cao màn hình
-    float boardPixelSize = screenH * 0.8f;
-    float cellSize = boardPixelSize / BOARD_SIZE;
+    BoardLayout layout = getBoardLayout(screenW, screenH);
 
-    // Căn giữa bàn cờ
-    float startX = (screenW - boardPixelSize) / 2.0f;
-    float startY = (screenH - boardPixelSize) / 2.0f;
+    float boardPixelSize = layout.boardPixelSize;
+    float cellSize = layout.cellSize;
+    float startX = layout.startX;
+    float startY = layout.startY;
 
-    // Vẽ nền bàn cờ (màu tối để nổi bật viền)
     DrawRectangle(startX, startY, boardPixelSize, boardPixelSize, Fade(BLACK, 0.6f));
 
-    // Vẽ các ô cờ
     for (int row = 0; row < BOARD_SIZE; row++) {
         for (int col = 0; col < BOARD_SIZE; col++) {
             float cellX = startX + col * cellSize;
             float cellY = startY + row * cellSize;
 
-            // 1. Vẽ khung từng ô
             DrawRectangleLinesEx({ cellX, cellY, cellSize, cellSize }, 2, buttonDarkPurple);
 
-            // 2. Vẽ Highlight nếu con trỏ đang ở ô này
             if (col == ui.cursorX && row == ui.cursorY) {
                 DrawRectangle(cellX, cellY, cellSize, cellSize, Fade(buttonYellow, 0.4f));
                 DrawRectangleLinesEx({ cellX, cellY, cellSize, cellSize }, 4, buttonYellow);
             }
 
-            // 3. Vẽ X hoặc O
             PlayerType piece = match.currentRound.board[row][col];
             if (piece != NONE) {
-                string text = (piece == X) ? "X" : "O";
+                std::string text = (piece == X) ? "X" : "O";
                 Color pieceColor = (piece == X) ? RED : BLUE;
                 float pieceFontSize = cellSize * 0.7f;
 
-                // Căn giữa chữ X/O vào giữa ô cờ
                 Vector2 textSize = MeasureTextEx(font8bit, text.c_str(), pieceFontSize, 0);
                 float textX = cellX + (cellSize - textSize.x) / 2.0f;
                 float textY = cellY + (cellSize - textSize.y) / 2.0f;
@@ -508,46 +470,108 @@ void drawBoard(const MatchState& match, const UIState& ui) {
         }
     }
 }
-
-void drawStatusPanel(const MatchState& match) {
-    
+void drawTurnBanner(const MatchState& match) {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    // Font size responsive
-    float nameFontSize = screenH * 0.08f;
-    float hpFontSize = screenH * 0.04f;
+    BoardLayout layout = getBoardLayout(screenW, screenH);
 
-    // Kích thước thanh máu (HP Bar)
-    float hpBarWidth = screenW * 0.2f;  // Chiếm 20% chiều ngang
-    float hpBarHeight = screenH * 0.05f; // Chiếm 5% chiều cao
+    const char* turnText = (match.currentRound.toMove == X) ? "TURN: PLAYER X" : "TURN: PLAYER O";
+    Color turnColor = (match.currentRound.toMove == X) ? RED : BLUE;
 
-    // VỊ TRÍ PANEL PLAYER X (BÊN TRÁI)
-    float leftX = screenW * 0.05f;
-    float leftY = screenH * 0.2f;
+    float fontSize = screenH * 0.04f;
+    Vector2 turnSize = MeasureTextEx(font8bit, turnText, fontSize, 0);
 
-    DrawTextEx(font8bit, "Player X", { leftX, leftY }, nameFontSize, 0, RED);
-    // Tính toán máu X
-    float hpFillX = hpBarWidth * ((float)match.playerX.health / MAX_HEALTH);
-    DrawRectangleLinesEx({ leftX, leftY + nameFontSize + 10, hpBarWidth, hpBarHeight }, 3, BLACK);
-    DrawRectangle(leftX, leftY + nameFontSize + 10, hpFillX, hpBarHeight, RED);
-    DrawTextEx(font8bit, TextFormat("HP: %d/%d", match.playerX.health, MAX_HEALTH),
-        { leftX, leftY + nameFontSize + hpBarHeight + 20 }, hpFontSize, 0, BLACK);
+    float paddingX = 28.0f;
+    float paddingY = 12.0f;
 
+    float turnBoxW = turnSize.x + paddingX * 2.0f;
+    float turnBoxH = turnSize.y + paddingY * 2.0f;
 
-    // VỊ TRÍ PANEL PLAYER O (BÊN PHẢI)
-    float rightX = screenW * 0.95f - hpBarWidth; // Neo về bên phải
-    float rightY = screenH * 0.2f;
+    float turnBoxX = screenW / 2.0f - turnBoxW / 2.0f;
+    float turnBoxY = layout.startY - turnBoxH - 16.0f; // cách hẳn bàn cờ ra
 
-    DrawTextEx(font8bit, "Player O", { rightX, rightY }, nameFontSize, 0, BLUE);
-    // Tính toán máu O
-    float hpFillO = hpBarWidth * ((float)match.playerO.health / MAX_HEALTH);
-    DrawRectangleLinesEx({ rightX, rightY + nameFontSize + 10, hpBarWidth, hpBarHeight }, 3, BLACK);
-    DrawRectangle(rightX, rightY + nameFontSize + 10, hpFillO, hpBarHeight, BLUE);
-    DrawTextEx(font8bit, TextFormat("HP: %d/%d", match.playerO.health, MAX_HEALTH),
-        { rightX, rightY + nameFontSize + hpBarHeight + 20 }, hpFontSize, 0, BLACK);
+    DrawRectangle((int)turnBoxX, (int)turnBoxY, (int)turnBoxW, (int)turnBoxH, Fade(BLACK, 0.75f));
+    DrawRectangleLinesEx({ turnBoxX, turnBoxY, turnBoxW, turnBoxH }, 3, turnColor);
+
+    DrawTextEx(font8bit,
+        turnText,
+        { turnBoxX + paddingX, turnBoxY + paddingY },
+        fontSize, 0, RAYWHITE);
 }
 
+void drawStatusPanel(const MatchState& match) {
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    float nameFontSize = screenH * 0.08f;
+    float hpFontSize = screenH * 0.035f;
+    float turnFontSize = screenH * 0.04f;
+
+    float hpBarWidth = screenW * 0.20f;
+    float hpBarHeight = screenH * 0.045f;
+
+    Color panelBg = Fade(BLACK, 0.50f);
+    Color hpBg = Fade(RAYWHITE, 0.16f);
+    Color hpBorder = Fade(WHITE, 0.90f);
+    Color infoColor = RAYWHITE;
+
+    float leftX = screenW * 0.05f;
+    float leftY = screenH * 0.16f;
+
+    float rightX = screenW * 0.95f - hpBarWidth;
+    float rightY = screenH * 0.16f;
+
+    DrawRectangle((int)(leftX - 20), (int)(leftY - 20), (int)(hpBarWidth + 40), 150, panelBg);
+    DrawRectangle((int)(rightX - 20), (int)(rightY - 20), (int)(hpBarWidth + 40), 150, panelBg);
+
+    DrawTextEx(font8bit, "Player X", { leftX, leftY }, nameFontSize, 0, RED);
+    float hpFillX = hpBarWidth * ((float)match.playerX.health / MAX_HEALTH);
+    DrawRectangle((int)leftX, (int)(leftY + nameFontSize + 12), (int)hpBarWidth, (int)hpBarHeight, hpBg);
+    DrawRectangle((int)leftX, (int)(leftY + nameFontSize + 12), (int)hpFillX, (int)hpBarHeight, RED);
+    DrawRectangleLinesEx({ leftX, leftY + nameFontSize + 12, hpBarWidth, hpBarHeight }, 3, hpBorder);
+    DrawTextEx(font8bit,
+        TextFormat("HP: %d/%d", match.playerX.health, MAX_HEALTH),
+        { leftX, leftY + nameFontSize + hpBarHeight + 24 },
+        hpFontSize, 0, infoColor);
+
+    DrawTextEx(font8bit, "Player O", { rightX, rightY }, nameFontSize, 0, BLUE);
+    float hpFillO = hpBarWidth * ((float)match.playerO.health / MAX_HEALTH);
+    DrawRectangle((int)rightX, (int)(rightY + nameFontSize + 12), (int)hpBarWidth, (int)hpBarHeight, hpBg);
+    DrawRectangle((int)rightX, (int)(rightY + nameFontSize + 12), (int)hpFillO, (int)hpBarHeight, BLUE);
+    DrawRectangleLinesEx({ rightX, rightY + nameFontSize + 12, hpBarWidth, hpBarHeight }, 3, hpBorder);
+    DrawTextEx(font8bit,
+        TextFormat("HP: %d/%d", match.playerO.health, MAX_HEALTH),
+        { rightX, rightY + nameFontSize + hpBarHeight + 24 },
+        hpFontSize, 0, infoColor);
+
+    const char* turnText;
+    Color turnColor;
+
+    if (match.currentRound.toMove == X)
+    {
+        turnText = "TURN: PLAYER X";
+        turnColor = RED;
+    }
+    else
+    {
+        turnText = "TURN: PLAYER O";
+        turnColor = BLUE;
+    }
+
+    Vector2 turnSize = MeasureTextEx(font8bit, turnText, turnFontSize, 0);
+    float turnBoxW = turnSize.x + 60.0f;
+    float turnBoxH = turnSize.y + 24.0f;
+    float turnBoxX = screenW / 2.0f - turnBoxW / 2.0f;
+    float turnBoxY = screenH * 0.06f;
+
+    DrawRectangle((int)turnBoxX, (int)turnBoxY, (int)turnBoxW, (int)turnBoxH, Fade(BLACK, 0.60f));
+    DrawRectangleLinesEx({ turnBoxX, turnBoxY, turnBoxW, turnBoxH }, 3, turnColor);
+    DrawTextEx(font8bit,
+        turnText,
+        { turnBoxX + 30.0f, turnBoxY + 12.0f },
+        turnFontSize, 0, RAYWHITE);
+}
 // nhom game over: Lam tam
 void drawGameOver(const MatchState& match, const UIState& ui) {
     
@@ -567,31 +591,101 @@ void drawGameOver(const MatchState& match, const UIState& ui) {
 
 void drawLoadGameScreen(const UIState& ui, const std::vector<std::string>& saveFiles) {
     drawParallaxBackground(1.0f);
-    
+
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    DrawTextEx(font8bit, "SELECT SAVE FILE", { screenW / 2.0f - 180, screenH * 0.1f }, 40, 2, buttonYellow);
+    DrawTextEx(font8bit, "SELECT SAVE FILE",
+        { screenW / 2.0f - 220, screenH * 0.10f }, 42, 2, buttonYellow);
 
-    if (saveFiles.empty()) {
-        DrawTextEx(font8bit, "No saves found in /saves folder.", { screenW / 2.0f - 250, screenH / 2.0f }, 30, 2, GRAY);
-        DrawTextEx(font8bit, "Press ESC to return.", { screenW / 2.0f - 150, screenH / 2.0f + 50 }, 20, 2, DARKGRAY);
+    if (saveFiles.empty())
+    {
+        DrawTextEx(font8bit, "No saves found in /saves folder.",
+            { screenW / 2.0f - 250, screenH / 2.0f }, 30, 2, GRAY);
+        DrawTextEx(font8bit, "Press ESC to return.",
+            { screenW / 2.0f - 150, screenH / 2.0f + 50 }, 20, 2, DARKGRAY);
         return;
     }
 
-    float startY = screenH * 0.3f;
-    for (size_t i = 0; i < saveFiles.size(); i++) {
-        bool isSelected = ((int)i == ui.loadMenuIndex);
-        Color textColor = isSelected ? buttonDarkPurple : buttonYellow;
-        Color bgColor = isSelected ? buttonYellow : BLANK;
+    float rowWidth = 620.0f;
+    float rowHeight = 52.0f;
+    float startY = screenH * 0.22f;
+    float gap = 16.0f;
 
-        float yPos = startY + i * 50;
-        DrawRectangle(screenW / 2.0f - 200, yPos - 5, 400, 40, bgColor);
-        DrawTextEx(font8bit, saveFiles[i].c_str(), { screenW / 2.0f - 180, yPos }, 30, 2, textColor);
+    for (size_t i = 0; i < saveFiles.size(); i++)
+    {
+        bool isSelected = ((int)i == ui.loadMenuIndex);
+
+        Color bgColor = isSelected ? buttonYellow : Fade(BLACK, 0.45f);
+        Color borderColor = isSelected ? WHITE : Fade(WHITE, 0.18f);
+        Color textColor = isSelected ? buttonDarkPurple : RAYWHITE;
+
+        float rowX = screenW / 2.0f - rowWidth / 2.0f;
+        float rowY = startY + i * (rowHeight + gap);
+
+        DrawRectangle((int)rowX, (int)rowY, (int)rowWidth, (int)rowHeight, bgColor);
+        DrawRectangleLinesEx({ rowX, rowY, rowWidth, rowHeight }, 2, borderColor);
+
+        std::string displayName = formatSaveDisplayName(saveFiles[i]);
+
+        Vector2 textSize = MeasureTextEx(font8bit, displayName.c_str(), 26.0f, 2.0f);
+        float textX = rowX + (rowWidth - textSize.x) / 2.0f;
+        float textY = rowY + (rowHeight - textSize.y) / 2.0f;
+
+        DrawTextEx(font8bit, displayName.c_str(), { textX, textY }, 26.0f, 2.0f, textColor);
     }
 }
 
 void drawSettingsScreen(const UIState& ui) {
-    // mock
     drawParallaxBackground(1.0f);
+
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    DrawTextEx(font8bit, "SETTINGS", { screenW / 2.0f - 140, screenH * 0.10f }, 52, 2, buttonYellow);
+
+    std::vector<std::string> items;
+    items.push_back(std::string("Screen Mode: ") + (ui.isFullscreen ? "Fullscreen" : "Windowed"));
+    items.push_back(std::string("Resolution: ") + RESOLUTIONS[ui.resolutionIndex].label);
+    items.push_back(std::string("Music: ") + (isMusicEnabled() ? "ON" : "OFF"));
+    items.push_back("Music Volume: " + std::to_string((int)(getMusicVolume() * 100)) + "%");
+    items.push_back(std::string("SFX: ") + (isSFXEnabled() ? "ON" : "OFF"));
+    items.push_back("SFX Volume: " + std::to_string((int)(getSFXVolume() * 100)) + "%");
+    items.push_back("Back");
+
+    float startY = screenH * 0.25f;
+    float gap = 60.0f;
+
+    for (int i = 0; i < (int)items.size(); i++)
+    {
+        bool isSelected = (i == ui.settingsMenuIndex);
+
+        Color bgColor = isSelected ? buttonYellow : Fade(BLACK, 0.45f);
+        Color textColor = isSelected ? buttonDarkPurple : RAYWHITE;
+
+        float rowX = screenW / 2.0f - 340.0f;
+        float rowY = startY + i * gap;
+
+        DrawRectangle((int)rowX, (int)rowY, 680, 46, bgColor);
+        DrawTextEx(font8bit, items[i].c_str(), { rowX + 20, rowY + 8 }, 28, 2, textColor);
+    }
+}
+
+std::string formatSaveDisplayName(const std::string& fileName) {
+    if (fileName.size() == 24 &&
+        fileName.rfind("save_", 0) == 0 &&
+        fileName.substr(fileName.size() - 4) == ".txt")
+    {
+        std::string year = fileName.substr(5, 4);
+        std::string month = fileName.substr(9, 2);
+        std::string day = fileName.substr(11, 2);
+        std::string hour = fileName.substr(14, 2);
+        std::string minute = fileName.substr(16, 2);
+        std::string second = fileName.substr(18, 2);
+
+        return day + "/" + month + "/" + year + "  -  " +
+            hour + ":" + minute + ":" + second;
+    }
+
+    return fileName;
 }
