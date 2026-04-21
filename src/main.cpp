@@ -6,7 +6,6 @@
 
 int main()
 {
-    
     // 1. Báo cho Raylib biết mình muốn chạy Fullscreen
     SetConfigFlags(FLAG_FULLSCREEN_MODE);
     
