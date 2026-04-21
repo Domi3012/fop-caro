@@ -206,31 +206,17 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
         if (ui.isSelectingX)
         {
             match.playerX.character = chosen;
+            playSFX(SFX_CLICK);
 
-            if (ui.isPVE)
-            {
-                // PVE: bot tu chon nhan vat, bat dau ngay
-                match.playerO.character = BRUISER;
-                Player playerX;
-                playerX.character = match.playerX.character;
-                playerX.health = MAX_HEALTH;
-                Player playerO;
-                playerO.character = match.playerO.character;
-                playerO.health = MAX_HEALTH;
-                initMatch(match, playerX, playerO);
-                startGameIntro(ui);
-            }
-            else
-            {
-                // PVP: chuyen sang cho O chon
-                ui.isSelectingX = false;
-                ui.characterMenuIndex = 1;
-            }
+            // Ca PVE lan PVP: chuyen sang buoc chon nhan vat thu 2
+            ui.isSelectingX = false;
+            ui.characterMenuIndex = 1;
         }
         else
         {
-            // PVP: O da chon xong -> bat dau game
+            // Buoc 2 da chon xong (O hoac Bot) -> bat dau game
             match.playerO.character = chosen;
+            playSFX(SFX_CLICK);
 
             Player playerX;
             playerX.character = match.playerX.character;
@@ -631,7 +617,7 @@ void handleLoadGameInput(MatchState &match, UIState &ui, const std::vector<std::
     {
         if (loadGame(match, saveFiles[ui.loadMenuIndex]))
         {
-            startMatch(ui);
+            startGameIntro(ui);
         }
     }
 

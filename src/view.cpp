@@ -378,8 +378,18 @@ void drawCharSelection(const UIState &ui)
     DrawRectangleLinesEx({panelX, panelY, panelW, panelH}, 4, buttonYellow);
 
     // Header
-    const char *headerText = ui.isSelectingX ? "PLAYER X IS CHOOSING" : "PLAYER O IS CHOOSING";
-    Color headerColor = ui.isSelectingX ? RED : BLUE;
+    const char *headerText;
+    Color headerColor;
+    if (ui.isSelectingX) {
+        headerText = "PLAYER X IS CHOOSING";
+        headerColor = RED;
+    } else if (ui.isPVE) {
+        headerText = "BOT IS CHOOSING";
+        headerColor = GRAY;
+    } else {
+        headerText = "PLAYER O IS CHOOSING";
+        headerColor = BLUE;
+    }
     float headerFontSize = screenH * 0.08f;
     Vector2 headerSize = MeasureTextEx(font8bit, headerText, headerFontSize, 2);
     DrawTextEx(font8bit, headerText, {screenW / 2.0f - headerSize.x / 2.0f, panelY + screenH * 0.05f}, headerFontSize, 2, headerColor);
