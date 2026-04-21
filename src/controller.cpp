@@ -330,7 +330,16 @@ void handleGameplayInput(MatchState &match, UIState &ui)
         if (ui.isPVE && match.currentRound.toMove == O)
         {
             auto botMove = getBestMove(match.currentRound, O, ui.botDifficulty);
-            processMoveAndResult(match, ui, botMove.first, botMove.second);
+            if (botMove.first == -1) 
+            {
+                match.currentRound.result = DRAW;   // Ghi nhận Hòa
+                match.countRoundsPlayed++;          // Tăng số round đã chơi
+                ui.currentScreen = ROUND_OVER;      // Chuyển màn hình kết thúc
+                ui.roundOverTimer = 0.0f;           // Reset timer cho hiệu ứng chuyển cảnh
+            }
+            else{
+                processMoveAndResult(match, ui, botMove.first, botMove.second);
+            }
         }
     }
 }
