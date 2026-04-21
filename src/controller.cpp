@@ -122,15 +122,18 @@ void handleMainMenuInput(UIState &ui)
     if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
     {
         ui.mainMenuIndex = wrapPrevIndex(ui.mainMenuIndex, totalOptions);
+        playSFX(SFX_CLICK);
     }
 
     if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
     {
         ui.mainMenuIndex = wrapNextIndex(ui.mainMenuIndex, totalOptions);
+        playSFX(SFX_CLICK);
     }
 
     if (IsKeyPressed(KEY_ENTER))
     {
+        playSFX(SFX_CLICK);
         switch (ui.mainMenuIndex)
         {
         case 0:
@@ -169,14 +172,18 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
 {
     if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT))
     {
-        if (ui.characterMenuIndex > 1)
+        if (ui.characterMenuIndex > 1) {
             ui.characterMenuIndex--;
+            playSFX(SFX_CLICK);
+        }
     }
 
     if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT))
     {
-        if (ui.characterMenuIndex < 3) // 3 nhân vật: index 1,2,3
+        if (ui.characterMenuIndex < 3) {
             ui.characterMenuIndex++;
+            playSFX(SFX_CLICK);
+        }
     }
 
     if (IsKeyPressed(KEY_ENTER))
@@ -202,17 +209,39 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
 
             if (ui.isPVE)
             {
-                match.playerO.character = BRUISER; // hoặc random
-                Player playerX{/* ... */};
-                Player playerO{/* ... */};
+                // PVE: bot tu chon nhan vat, bat dau ngay
+                match.playerO.character = BRUISER;
+                Player playerX;
+                playerX.character = match.playerX.character;
+                playerX.health = MAX_HEALTH;
+                Player playerO;
+                playerO.character = match.playerO.character;
+                playerO.health = MAX_HEALTH;
                 initMatch(match, playerX, playerO);
                 startGameIntro(ui);
             }
             else
             {
+                // PVP: chuyen sang cho O chon
                 ui.isSelectingX = false;
                 ui.characterMenuIndex = 1;
             }
+        }
+        else
+        {
+            // PVP: O da chon xong -> bat dau game
+            match.playerO.character = chosen;
+
+            Player playerX;
+            playerX.character = match.playerX.character;
+            playerX.health = MAX_HEALTH;
+
+            Player playerO;
+            playerO.character = match.playerO.character;
+            playerO.health = MAX_HEALTH;
+
+            initMatch(match, playerX, playerO);
+            startGameIntro(ui);
         }
     }
 
@@ -223,6 +252,7 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
         ui.mainMenuIndex = 0;
         ui.isSelectingX = true;
         ui.characterMenuIndex = 1;
+        playMusic(BGM_MENU);
     }
 }
 
@@ -252,7 +282,14 @@ void handleGameplayInput(MatchState &match, UIState &ui)
             {
                 time_t t = time(NULL);
                 struct tm timeinfo;
+
+#ifdef _WIN32
+                // Cách dùng của Microsoft Visual Studio
                 localtime_s(&timeinfo, &t);
+#else
+                // Cách dùng chuẩn POSIX cho Linux/macOS
+                localtime_r(&t, &timeinfo);
+#endif
 
                 char buffer[64];
                 std::strftime(buffer, sizeof(buffer), "save_%Y%m%d_%H%M%S.txt", &timeinfo);
@@ -265,6 +302,7 @@ void handleGameplayInput(MatchState &match, UIState &ui)
                 ui.isPaused = false;
                 ui.currentScreen = MAIN_MENU;
                 ui.mainMenuIndex = 0;
+                playMusic(BGM_MENU);
             }
         }
 
@@ -320,7 +358,17 @@ void handleGameplayInput(MatchState &match, UIState &ui)
     // Đặt quân
     if (IsKeyPressed(KEY_ENTER))
     {
+        GameScreen prevGameScreen = ui.currentScreen;
         processMoveAndResult(match, ui, ui.cursorY, ui.cursorX);
+        
+        // Phat SFX dua theo ket qua sau khi dat quan
+        if (ui.currentScreen == ROUND_OVER) {
+            playSFX(SFX_WIN);
+        } else if (ui.currentScreen == GAME_OVER) {
+            playSFX(SFX_GAME_OVER);
+        } else if (prevGameScreen == GAME_BOARD && ui.currentScreen == GAME_BOARD) {
+            playSFX(SFX_PLACE);
+        }
 
         if (ui.currentScreen != GAME_BOARD)
         {
@@ -385,11 +433,13 @@ void handleGameOverInput(MatchState &match, UIState &ui)
         ui.mainMenuIndex = 0;
         ui.isSelectingX = true;
         ui.characterMenuIndex = 1;
+        playMusic(BGM_MENU);
     }
 
     if (IsKeyPressed(KEY_ESCAPE))
     {
-        ui.currentScreen = MAIN_MENU; // Thay vì CloseWindow()
+        ui.currentScreen = MAIN_MENU;
+        playMusic(BGM_MENU);
     }
 
     (void)match;
@@ -399,9 +449,10 @@ void handleGameOverInput(MatchState &match, UIState &ui)
 // Cai dat introCamX qua ben phai man hinh va chuyen bien trang thai thanh GAME_INTRO
 void startGameIntro(UIState &ui)
 {
-    ui.introCamX = (float)GetScreenWidth() * 5.0f; // Bat dau xa x5
-    ui.roundOverTimer = 0.0f;                      // Su dung tam time nay cho intro
+    ui.introCamX = (float)GetScreenWidth() * 5.0f;
+    ui.roundOverTimer = 0.0f;
     ui.currentScreen = GAME_INTRO;
+    playMusic(BGM_BATTLE); // Bat nhac nen tran dau ngay tu intro
 }
 
 // startMatch:
@@ -412,7 +463,7 @@ void startMatch(UIState &ui)
 {
     ui.cursorX = BOARD_SIZE / 2;
     ui.cursorY = BOARD_SIZE / 2;
-    ui.roundOverTimer = 0.0f; // luôn reset timer khi bắt đầu game/round
+    ui.roundOverTimer = 0.0f;
     ui.introCamX = 0.0f;
     ui.currentScreen = GAME_BOARD;
 }
