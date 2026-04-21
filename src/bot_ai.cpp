@@ -59,7 +59,7 @@ std::pair<int, int> getBestMove(const RoundState &roundState, PlayerType botType
 
     // MEDIUM & HARD: Tìm ô có điểm cao nhất
     long long maxScore = -1;
-    pair<int, int> bestMove = {BOARD_SIZE / 2, BOARD_SIZE / 2};
+    pair<int, int> bestMove = {-1, -1};
 
     for (int i = 0; i < BOARD_SIZE; i++)
     {
