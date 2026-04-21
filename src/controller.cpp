@@ -2,67 +2,188 @@
 #include "view.h"
 #include "save_manager.h"
 #include <ctime>
+#include "bot_ai.h"
+#include "audio_manager.h"
 
+static int wrapPrevIndex(int current, int total)
+{
+    if (total <= 0)
+    {
+        return 0;
+    }
+
+    return (current - 1 + total) % total;
+}
+
+static int wrapNextIndex(int current, int total)
+{
+    if (total <= 0)
+    {
+        return 0;
+    }
+
+    return (current + 1) % total;
+}
+
+struct ResolutionOption {
+    int width;
+    int height;
+    const char* label;
+};
+
+static const ResolutionOption RESOLUTIONS[] =
+{
+    {1280,  720,  "1280x720 (16:9)"},
+    {1366,  768,  "1366x768 (16:9)"},
+    {1600,  900,  "1600x900 (16:9)"},
+    {1920, 1080,  "1920x1080 (16:9)"},
+    {2560, 1440,  "2560x1440 (16:9)"}
+};
+static const int RESOLUTION_COUNT = sizeof(RESOLUTIONS) / sizeof(RESOLUTIONS[0]);
+
+// Áp dụng cài đặt hiển thị mới: Fullscreen và Resolution
+static void applyDisplaySettings(UIState &ui)
+{
+    const ResolutionOption &res = RESOLUTIONS[ui.resolutionIndex];
+
+    if (ui.isFullscreen)
+    {
+        if (!IsWindowFullscreen())
+        {
+            ToggleFullscreen();
+        }
+    }
+    else
+    {
+        if (IsWindowFullscreen())
+        {
+            ToggleFullscreen();
+        }
+
+        SetWindowSize(res.width, res.height);
+
+        int monitor = GetCurrentMonitor();
+        int monitorWidth = GetMonitorWidth(monitor);
+        int monitorHeight = GetMonitorHeight(monitor);
+
+        SetWindowPosition(
+            (monitorWidth - res.width) / 2,
+            (monitorHeight - res.height) / 2);
+    }
+}
+
+void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
+{
+    RoundState &round = match.currentRound;
+
+    if (!checkValidMove(round, x, y))
+    {
+        return;
+    }
+
+    makeMove(round, x, y);
+    RoundResult rr = checkRoundResult(round, x, y);
+
+    if (rr == X_WINS || rr == O_WINS)
+    {
+        round.result = rr;
+        match.countRoundsPlayed++;
+
+        Player &attacker = (rr == X_WINS) ? match.playerX : match.playerO;
+        Player &defender = (rr == X_WINS) ? match.playerO : match.playerX;
+        executeAttack(attacker, defender, round.turnCount);
+
+        RoundResult mr = checkMatchResult(match);
+        if (mr == X_WINS || mr == O_WINS)
+        {
+            match.matchResult = mr;
+            ui.currentScreen = GAME_OVER;
+        }
+        else
+        {
+            ui.currentScreen = ROUND_OVER;
+        }
+    }
+    else if (rr == DRAW)
+    {
+        round.result = DRAW;
+        match.countRoundsPlayed++;
+        ui.currentScreen = ROUND_OVER;
+    }
+}
 
 // handleMainMenuInput:
 // Lên xuống để di chuyển mainMenuIndex
 // Enter để xác nhận -> chuyển sang CHARACTER_SELECTION
-void handleMainMenuInput(UIState& ui) {
+void handleMainMenuInput(UIState &ui)
+{
+    const int totalOptions = 4;
+
     if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
     {
-        if (ui.mainMenuIndex > 0)
-            ui.mainMenuIndex--;
+        ui.mainMenuIndex = wrapPrevIndex(ui.mainMenuIndex, totalOptions);
+        playSFX(SFX_CLICK);
     }
 
     if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
     {
-        if (ui.mainMenuIndex < 3) // 4 options: index 0,1,2,3 
-            ui.mainMenuIndex++;
+        ui.mainMenuIndex = wrapNextIndex(ui.mainMenuIndex, totalOptions);
+        playSFX(SFX_CLICK);
     }
 
     if (IsKeyPressed(KEY_ENTER))
     {
-        //Thêm các option sau tại đây
-        switch (ui.mainMenuIndex) {
-        // Option 0: Start Game
-        case(0):
+        playSFX(SFX_CLICK);
+        switch (ui.mainMenuIndex)
+        {
+        case 0:
+        {
             ui.currentScreen = MODE_SELECTION;
             ui.modeMenuIndex = 0;
             break;
-        case(1):
+        }
+        case 1:
+        {
             ui.currentScreen = LOAD_GAME;
             ui.loadMenuIndex = 0;
             break;
-        // Option 2: Settings
-        case(2):
+        }
+        case 2:
+        {
             ui.currentScreen = SETTINGS;
             ui.settingsMenuIndex = 0;
             break;
-        // Option 3: Exit game
-        case(3):
+        }
+        case 3:
+        {
             ui.shouldExit = true;
             break;
         }
+        }
     }
 }
-
 
 // handleCharSelectionInput:
 // Lên xuống để chọn nhân vật (1 = ASSASSIN, 2 = BRUISER, 3 = VAMPIRE)
 // Enter để xác nhận
 // X chọn xong -> O chọn
 // O chọn xong -> initMatch và chuyển sang GAME_BOARD
-void handleCharSelectionInput(MatchState& match, UIState& ui) {
+void handleCharSelectionInput(MatchState &match, UIState &ui)
+{
     if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT))
     {
-        if (ui.characterMenuIndex > 1)
+        if (ui.characterMenuIndex > 1) {
             ui.characterMenuIndex--;
+            playSFX(SFX_CLICK);
+        }
     }
 
     if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT))
     {
-        if (ui.characterMenuIndex < 3) // 3 nhân vật: index 1,2,3
+        if (ui.characterMenuIndex < 3) {
             ui.characterMenuIndex++;
+            playSFX(SFX_CLICK);
+        }
     }
 
     if (IsKeyPressed(KEY_ENTER))
@@ -71,26 +192,32 @@ void handleCharSelectionInput(MatchState& match, UIState& ui) {
         CharacterType chosen;
         switch (ui.characterMenuIndex)
         {
-        case 1:  chosen = ASSASSIN; break;
-        case 2:  chosen = BRUISER;  break;
-        default: chosen = VAMPIRE;  break;
+        case 1:
+            chosen = ASSASSIN;
+            break;
+        case 2:
+            chosen = BRUISER;
+            break;
+        default:
+            chosen = VAMPIRE;
+            break;
         }
 
         if (ui.isSelectingX)
         {
-            // Lưu tạm nhân vật X vào match, O sẽ ghi đè sau
             match.playerX.character = chosen;
+            playSFX(SFX_CLICK);
 
-            // Chuyển sang cho O chọn
+            // Ca PVE lan PVP: chuyen sang buoc chon nhan vat thu 2
             ui.isSelectingX = false;
             ui.characterMenuIndex = 1;
         }
         else
         {
-            // O vừa chọn xong
+            // Buoc 2 da chon xong (O hoac Bot) -> bat dau game
             match.playerO.character = chosen;
+            playSFX(SFX_CLICK);
 
-            // Tạo 2 player hoàn chỉnh rồi khởi tạo match
             Player playerX;
             playerX.character = match.playerX.character;
             playerX.health = MAX_HEALTH;
@@ -100,8 +227,6 @@ void handleCharSelectionInput(MatchState& match, UIState& ui) {
             playerO.health = MAX_HEALTH;
 
             initMatch(match, playerX, playerO);
-
-            // Bat dau intro animation truoc khi vao GAME_BOARD
             startGameIntro(ui);
         }
     }
@@ -113,49 +238,70 @@ void handleCharSelectionInput(MatchState& match, UIState& ui) {
         ui.mainMenuIndex = 0;
         ui.isSelectingX = true;
         ui.characterMenuIndex = 1;
+        playMusic(BGM_MENU);
     }
 }
-
 
 // handleGameplayInput:
 // Mũi tên để di chuyển con trỏ trên bàn cờ
 // Enter để đặt quân tại ô đang trỏ
 // Sau mỗi nước đi hợp lệ kiểm tra kết quả round rồi match
-void handleGameplayInput(MatchState& match, UIState& ui) {
-    if (ui.isPaused) {
-        if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP)) {
-            if (ui.pauseMenuIndex > 0) ui.pauseMenuIndex--;
+void handleGameplayInput(MatchState &match, UIState &ui)
+{
+    if (ui.isPaused)
+    {
+        const int pauseOptionCount = 2;
+
+        if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+        {
+            ui.pauseMenuIndex = wrapPrevIndex(ui.pauseMenuIndex, pauseOptionCount);
         }
-        if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN)) {
-            if (ui.pauseMenuIndex < 1) ui.pauseMenuIndex++;
+
+        if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+        {
+            ui.pauseMenuIndex = wrapNextIndex(ui.pauseMenuIndex, pauseOptionCount);
         }
-        if (IsKeyPressed(KEY_ENTER)) {
-            if (ui.pauseMenuIndex == 0) {
-                // Save game
+
+        if (IsKeyPressed(KEY_ENTER))
+        {
+            if (ui.pauseMenuIndex == 0)
+            {
                 time_t t = time(NULL);
                 struct tm timeinfo;
+
+#ifdef _WIN32
+                // Cách dùng của Microsoft Visual Studio
                 localtime_s(&timeinfo, &t);
+#else
+                // Cách dùng chuẩn POSIX cho Linux/macOS
+                localtime_r(&t, &timeinfo);
+#endif
 
                 char buffer[64];
-                // Thêm dấu & trước timeinfo ở dòng dưới đây:
                 std::strftime(buffer, sizeof(buffer), "save_%Y%m%d_%H%M%S.txt", &timeinfo);
 
                 saveGame(match, buffer);
-                ui.isPaused = false; // resumes game after save
-            } else if (ui.pauseMenuIndex == 1) {
-                // Exit
+                ui.isPaused = false;
+            }
+            else if (ui.pauseMenuIndex == 1)
+            {
                 ui.isPaused = false;
                 ui.currentScreen = MAIN_MENU;
                 ui.mainMenuIndex = 0;
+                playMusic(BGM_MENU);
             }
         }
-        if (IsKeyPressed(KEY_ESCAPE)) {
+
+        if (IsKeyPressed(KEY_ESCAPE))
+        {
             ui.isPaused = false;
         }
+
         return;
     }
 
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
         ui.isPaused = true;
         ui.pauseMenuIndex = 0;
         return;
@@ -165,28 +311,32 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
     // W/S/up/down sẽ là cursorY vì di chuyển theo chiều dọc (col)
     if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
     {
-        if (ui.cursorY > 0){
+        if (ui.cursorY > 0)
+        {
             ui.cursorY--;
         }
     }
 
     if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
     {
-        if (ui.cursorY < BOARD_SIZE - 1) {
+        if (ui.cursorY < BOARD_SIZE - 1)
+        {
             ui.cursorY++;
         }
     }
     // A/D/right/left sẽ là cursorX vì di chuyển theo chiều dọc (col)
     if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT))
     {
-        if (ui.cursorX > 0) {
+        if (ui.cursorX > 0)
+        {
             ui.cursorX--;
         }
     }
 
     if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT))
     {
-        if (ui.cursorX < BOARD_SIZE - 1) {
+        if (ui.cursorX < BOARD_SIZE - 1)
+        {
             ui.cursorX++;
         }
     }
@@ -194,51 +344,46 @@ void handleGameplayInput(MatchState& match, UIState& ui) {
     // Đặt quân
     if (IsKeyPressed(KEY_ENTER))
     {
-        RoundState& round = match.currentRound;
+        GameScreen prevGameScreen = ui.currentScreen;
+        processMoveAndResult(match, ui, ui.cursorY, ui.cursorX);
+        
+        // Phat SFX dua theo ket qua sau khi dat quan
+        if (ui.currentScreen == ROUND_OVER) {
+            playSFX(SFX_WIN);
+        } else if (ui.currentScreen == GAME_OVER) {
+            playSFX(SFX_GAME_OVER);
+        } else if (prevGameScreen == GAME_BOARD && ui.currentScreen == GAME_BOARD) {
+            playSFX(SFX_PLACE);
+        }
 
-        if (!checkValidMove(round, ui.cursorY, ui.cursorX))
+        if (ui.currentScreen != GAME_BOARD)
+        {
             return;
+        }
 
-        makeMove(round, ui.cursorY, ui.cursorX);
-
-        RoundResult rr = checkRoundResult(round, ui.cursorY, ui.cursorX);
-
-        if (rr == X_WINS || rr == O_WINS)
+        if (ui.isPVE && match.currentRound.toMove == O)
         {
-            round.result = rr;
-            match.countRoundsPlayed++;
-
-            Player& attacker = (rr == X_WINS) ? match.playerX : match.playerO;
-            Player& defender = (rr == X_WINS) ? match.playerO : match.playerX;
-            executeAttack(attacker, defender, round.turnCount);
-
-            RoundResult mr = checkMatchResult(match);
-            if (mr == X_WINS || mr == O_WINS)
+            auto botMove = getBestMove(match.currentRound, O, ui.botDifficulty);
+            if (botMove.first == -1) 
             {
-                match.matchResult = mr;
-                ui.currentScreen = GAME_OVER;
+                match.currentRound.result = DRAW;   // Ghi nhận Hòa
+                match.countRoundsPlayed++;          // Tăng số round đã chơi
+                ui.currentScreen = ROUND_OVER;      // Chuyển màn hình kết thúc
+                ui.roundOverTimer = 0.0f;           // Reset timer cho hiệu ứng chuyển cảnh
             }
-            else
-            {
-                ui.currentScreen = ROUND_OVER;
+            else{
+                processMoveAndResult(match, ui, botMove.first, botMove.second);
             }
         }
-        else if (rr == DRAW)
-        {
-            round.result = DRAW;
-            match.countRoundsPlayed++;
-            ui.currentScreen = ROUND_OVER;
-        }
-        // ONGOING: không làm gì, tiếp tục chơi
     }
 }
-
 
 // handleRoundOverInput:
 // Nhấn bất kỳ phím nào để tiếp tục
 // Nếu match còn ONGOING -> khởi tạo round mới, quay lại GAME_BOARD
 // Nếu match kết thúc   -> chuyển sang GAME_OVER
-void handleRoundOverInput(MatchState& match, UIState& ui) {
+void handleRoundOverInput(MatchState &match, UIState &ui)
+{
     ui.roundOverTimer += GetFrameTime();
 
     if (ui.roundOverTimer < 2.0f)
@@ -253,79 +398,110 @@ void handleRoundOverInput(MatchState& match, UIState& ui) {
     else
     {
         initRound(match.currentRound, match.countRoundsPlayed);
-        startMatch(ui); // reset cursor + timer + chuyển sang GAME_BOARD
+
+        if (ui.isPVE)
+        {
+            match.currentRound.toMove = X;
+        }
+
+        startMatch(ui);
     }
 }
 
 // handleGameOverInput:
 // Enter -> quay lại MAIN_MENU
 // ESC   -> thoát game (đóng cửa sổ raylib)
-void handleGameOverInput(MatchState& match, UIState& ui) {
+void handleGameOverInput(MatchState &match, UIState &ui)
+{
     if (IsKeyPressed(KEY_ENTER))
     {
         ui.currentScreen = MAIN_MENU;
         ui.mainMenuIndex = 0;
         ui.isSelectingX = true;
         ui.characterMenuIndex = 1;
+        playMusic(BGM_MENU);
     }
 
     if (IsKeyPressed(KEY_ESCAPE))
     {
-        ui.currentScreen = MAIN_MENU; // Thay vì CloseWindow()
+        ui.currentScreen = MAIN_MENU;
+        playMusic(BGM_MENU);
     }
 
     (void)match;
 }
 
-
 // startGameIntro:
 // Cai dat introCamX qua ben phai man hinh va chuyen bien trang thai thanh GAME_INTRO
-void startGameIntro(UIState& ui) {
-    ui.introCamX = (float)GetScreenWidth() * 5.0f; // Bat dau xa x5
-    ui.roundOverTimer = 0.0f; // Su dung tam time nay cho intro
+void startGameIntro(UIState &ui)
+{
+    ui.introCamX = (float)GetScreenWidth() * 5.0f;
+    ui.roundOverTimer = 0.0f;
     ui.currentScreen = GAME_INTRO;
+    playMusic(BGM_BATTLE); // Bat nhac nen tran dau ngay tu intro
 }
-
 
 // startMatch:
 // Điểm thống nhất để khởi động game sau khi match đã được khởi tạo.
 // Dùng chung cho cả New Game (sau initMatch) lẫn Load Game (sau loadGame)
 // và bắt đầu round mới (sau initRound trong handleRoundOverInput).
-void startMatch(UIState& ui) {
+void startMatch(UIState &ui)
+{
     ui.cursorX = BOARD_SIZE / 2;
     ui.cursorY = BOARD_SIZE / 2;
-    ui.roundOverTimer = 0.0f; // luôn reset timer khi bắt đầu game/round
+    ui.roundOverTimer = 0.0f;
     ui.introCamX = 0.0f;
     ui.currentScreen = GAME_BOARD;
 }
 
 // handleModeSelectionInput:
 // W/S hoac A/D de chon giua PVP (0) va PVE (1)
-void handleModeSelectionInput(UIState& ui) {
+void handleModeSelectionInput(UIState &ui)
+{
+    const int modeCount = 2;
+
     if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT) ||
-        IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP)) {
-        if (ui.modeMenuIndex > 0) ui.modeMenuIndex--;
+        IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    {
+        ui.modeMenuIndex = wrapPrevIndex(ui.modeMenuIndex, modeCount);
     }
+
     if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT) ||
-        IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN)) {
-        if (ui.modeMenuIndex < 1) ui.modeMenuIndex++;
+        IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    {
+        ui.modeMenuIndex = wrapNextIndex(ui.modeMenuIndex, modeCount);
     }
-    if (IsKeyPressed(KEY_ENTER)) {
+
+    if (IsKeyPressed(KEY_ENTER))
+    {
         ui.isPVE = (ui.modeMenuIndex == 1);
-        ui.currentScreen = CHARACTER_SELECTION;
-        ui.isSelectingX = true;
-        ui.characterMenuIndex = 1;
+
+        if (ui.isPVE)
+        {
+            ui.currentScreen = BOT_DIFFICULTY_SELECTION;
+            ui.botDifficultyIndex = 0;
+        }
+        else
+        {
+            ui.currentScreen = CHARACTER_SELECTION;
+            ui.isSelectingX = true;
+            ui.characterMenuIndex = 1;
+        }
     }
-    if (IsKeyPressed(KEY_ESCAPE)) {
+
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
         ui.currentScreen = MAIN_MENU;
     }
 }
 
 // handleGameIntroInput:
 // Xu ly logic animation (giam introCamX) hoac skip (Enter/Space)
-void handleGameIntroInput(MatchState& match, UIState& ui) {
+void handleGameIntroInput(MatchState &match, UIState &ui)
+{
     // Skip intro
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+    {
         ui.introCamX = 0.0f;
         startMatch(ui);
         return;
@@ -333,24 +509,26 @@ void handleGameIntroInput(MatchState& match, UIState& ui) {
 
     float dt = GetFrameTime();
     ui.roundOverTimer += dt;
-    
+
     float totalTime = 3.5f; // Epic intro keo dai 3.5s
     float totalDistance = (float)GetScreenWidth() * 5.0f;
-    
+
     // Su dung Smootherstep ease-in-out: E'(p) = 30 * p^2 * (1-p)^2
     float p = ui.roundOverTimer / totalTime;
-    if (p >= 1.0f) {
+    if (p >= 1.0f)
+    {
         ui.introCamX = 0.0f;
         startMatch(ui);
         return;
     }
-    
+
     float ep_prime = 30.0f * p * p * (1.0f - p) * (1.0f - p);
     float velocity = ep_prime * totalDistance / totalTime;
 
     ui.introCamX -= velocity * dt;
-    
-    if (ui.introCamX <= 0.0f) {
+
+    if (ui.introCamX <= 0.0f)
+    {
         ui.introCamX = 0.0f;
         startMatch(ui);
     }
@@ -360,7 +538,8 @@ void handleGameIntroInput(MatchState& match, UIState& ui) {
 
 // handleInput:
 // Dispatcher trung tâm, gọi đúng handler theo màn hình hiện tại
-void handleInput(MatchState& match, UIState& ui) {
+void handleInput(MatchState &match, UIState &ui)
+{
     // Lấy danh sách save files một lần để tránh gọi nhiều lần trong 1 frame
     static std::vector<std::string> cachedSaveFiles;
 
@@ -404,43 +583,209 @@ void handleInput(MatchState& match, UIState& ui) {
     case GAME_OVER:
         handleGameOverInput(match, ui);
         break;
+
+    case BOT_DIFFICULTY_SELECTION:
+        handleBotDifficultyInput(ui);
+        break;
     }
 }
 
-void handleLoadGameInput(MatchState& match, UIState& ui, const std::vector<std::string>& saveFiles) {
-    // Nếu không có file save, ấn phím bất kỳ để thoát ra Main Menu
-    if (saveFiles.empty()) {
-        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER)) {
+void handleLoadGameInput(MatchState &match, UIState &ui, const std::vector<std::string> &saveFiles)
+{
+    if (saveFiles.empty())
+    {
+        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER))
+        {
             ui.currentScreen = MAIN_MENU;
         }
         return;
     }
 
-    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP)) {
-        if (ui.loadMenuIndex > 0) ui.loadMenuIndex--;
+    const int totalSaves = (int)saveFiles.size();
+
+    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    {
+        ui.loadMenuIndex = wrapPrevIndex(ui.loadMenuIndex, totalSaves);
     }
 
-    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN)) {
-        if (ui.loadMenuIndex < (int)saveFiles.size() - 1) ui.loadMenuIndex++;
+    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    {
+        ui.loadMenuIndex = wrapNextIndex(ui.loadMenuIndex, totalSaves);
     }
 
-    // Chọn file để load
-    if (IsKeyPressed(KEY_ENTER)) {
-        // Dùng startMatch() để thống nhất flow chuyển sang GAME_BOARD
-        if (loadGame(match, saveFiles[ui.loadMenuIndex])) {
-            startMatch(ui);
+    if (IsKeyPressed(KEY_ENTER))
+    {
+        if (loadGame(match, saveFiles[ui.loadMenuIndex]))
+        {
+            startGameIntro(ui);
         }
     }
 
-    // Bấm ESC để quay lại
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
         ui.currentScreen = MAIN_MENU;
     }
 }
 
-void handleSettingsInput(UIState& ui) {
-    // Bấm ESC để quay lại Main Menu
-    if (IsKeyPressed(KEY_ESCAPE)) {
+void handleSettingsInput(UIState &ui)
+{
+    const int SETTINGS_COUNT = 7;
+
+    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    {
+        ui.settingsMenuIndex = wrapPrevIndex(ui.settingsMenuIndex, SETTINGS_COUNT);
+    }
+
+    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    {
+        ui.settingsMenuIndex = wrapNextIndex(ui.settingsMenuIndex, SETTINGS_COUNT);
+    }
+
+    bool left = IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT);
+    bool right = IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT);
+    bool enter = IsKeyPressed(KEY_ENTER);
+
+    switch (ui.settingsMenuIndex)
+    {
+    case 0:
+    {
+        if (left || right || enter)
+        {
+            ui.isFullscreen = !ui.isFullscreen;
+            applyDisplaySettings(ui);
+        }
+        break;
+    }
+
+    case 1:
+    {
+        if (left)
+        {
+            ui.resolutionIndex = wrapPrevIndex(ui.resolutionIndex, RESOLUTION_COUNT);
+
+            if (!ui.isFullscreen)
+            {
+                applyDisplaySettings(ui);
+            }
+        }
+
+        if (right)
+        {
+            ui.resolutionIndex = wrapNextIndex(ui.resolutionIndex, RESOLUTION_COUNT);
+
+            if (!ui.isFullscreen)
+            {
+                applyDisplaySettings(ui);
+            }
+        }
+        break;
+    }
+
+    case 2:
+    {
+        if (left || right || enter)
+        {
+            toggleMusicEnabled();
+        }
+        break;
+    }
+
+    case 3:
+    {
+        if (left)
+        {
+            setMusicVolume(getMusicVolume() - 0.1f);
+        }
+
+        if (right)
+        {
+            setMusicVolume(getMusicVolume() + 0.1f);
+        }
+        break;
+    }
+
+    case 4:
+    {
+        if (left || right || enter)
+        {
+            toggleSFXEnabled();
+        }
+        break;
+    }
+
+    case 5:
+    {
+        if (left)
+        {
+            setSFXVolume(getSFXVolume() - 0.1f);
+        }
+
+        if (right)
+        {
+            setSFXVolume(getSFXVolume() + 0.1f);
+        }
+        break;
+    }
+
+    case 6:
+    {
+        if (enter || IsKeyPressed(KEY_ESCAPE))
+        {
+            ui.currentScreen = MAIN_MENU;
+            ui.mainMenuIndex = 0;
+        }
+        break;
+    }
+    }
+
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
         ui.currentScreen = MAIN_MENU;
+        ui.mainMenuIndex = 0;
+    }
+}
+void handleBotDifficultyInput(UIState& ui) {
+    const int totalOptions = 3;
+
+    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    {
+        ui.botDifficultyIndex = (ui.botDifficultyIndex - 1 + totalOptions) % totalOptions;
+    }
+
+    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    {
+        ui.botDifficultyIndex = (ui.botDifficultyIndex + 1) % totalOptions;
+    }
+
+    if (IsKeyPressed(KEY_ENTER))
+    {
+        switch (ui.botDifficultyIndex)
+        {
+        case 0:
+        {
+            ui.botDifficulty = EASY;
+            break;
+        }
+        case 1:
+        {
+            ui.botDifficulty = MEDIUM;
+            break;
+        }
+        case 2:
+        {
+            ui.botDifficulty = HARD;
+            break;
+        }
+        }
+
+        ui.currentScreen = CHARACTER_SELECTION;
+        ui.isSelectingX = true;
+        ui.characterMenuIndex = 1;
+    }
+
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
+        ui.currentScreen = MODE_SELECTION;
+        ui.modeMenuIndex = 1;
     }
 }

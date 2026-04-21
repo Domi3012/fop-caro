@@ -30,3 +30,9 @@ void setMusicVolume(float volume); // 0.0f đến 1.0f
 void setSFXVolume(float volume);
 void toggleMusicEnabled();
 void toggleSFXEnabled();
+
+// API truy vấn trạng thái
+bool isMusicEnabled();
+bool isSFXEnabled();
+float getMusicVolume();
+float getSFXVolume();
