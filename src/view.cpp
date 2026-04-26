@@ -318,14 +318,15 @@ void drawMenuButton(const UIState &ui)
     }
 }
 
-void drawModeSelectionScreen(const UIState& ui) {
+void drawModeSelectionScreen(const UIState &ui)
+{
     drawParallaxBackground(1.0f);
 
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    const char* title = "SELECT GAME MODE";
-    const char* modes[] = { "PLAYER VS PLAYER", "PLAYER VS ENVIRONMENT (BOT)" };
+    const char *title = "SELECT GAME MODE";
+    const char *modes[] = {"PLAYER VS PLAYER", "PLAYER VS ENVIRONMENT (BOT)"};
     const int totalOptions = 2;
 
     float titleFontSize = screenH * 0.07f;
@@ -338,8 +339,8 @@ void drawModeSelectionScreen(const UIState& ui) {
 
     Vector2 titleSize = MeasureTextEx(font8bit, title, titleFontSize, spacing);
     DrawTextEx(font8bit, title,
-        { screenW / 2.0f - titleSize.x / 2.0f, screenH * 0.18f },
-        titleFontSize, spacing, buttonYellow);
+               {screenW / 2.0f - titleSize.x / 2.0f, screenH * 0.18f},
+               titleFontSize, spacing, buttonYellow);
 
     for (int i = 0; i < totalOptions; i++)
     {
@@ -353,13 +354,13 @@ void drawModeSelectionScreen(const UIState& ui) {
         Color textColor = isSelected ? buttonDarkPurple : buttonYellow;
 
         DrawRectangle((int)posX, (int)posY, (int)rowWidth, (int)rowHeight, bgColor);
-        DrawRectangleLinesEx({ posX, posY, rowWidth, rowHeight }, 3, borderColor);
+        DrawRectangleLinesEx({posX, posY, rowWidth, rowHeight}, 3, borderColor);
 
         Vector2 textSize = MeasureTextEx(font8bit, modes[i], optionFontSize, spacing);
         float textX = posX + (rowWidth - textSize.x) / 2.0f;
         float textY = posY + (rowHeight - textSize.y) / 2.0f;
 
-        DrawTextEx(font8bit, modes[i], { textX, textY }, optionFontSize, spacing, textColor);
+        DrawTextEx(font8bit, modes[i], {textX, textY}, optionFontSize, spacing, textColor);
     }
 }
 // --- CAC HAM LIEN QUAN DEN CHARACTER SELECTION ---
@@ -382,13 +383,18 @@ void drawCharSelection(const UIState &ui)
     // Header
     const char *headerText;
     Color headerColor;
-    if (ui.isSelectingX) {
+    if (ui.isSelectingX)
+    {
         headerText = "PLAYER X IS CHOOSING";
         headerColor = RED;
-    } else if (ui.isPVE) {
-        headerText = "BOT IS CHOOSING";
+    }
+    else if (ui.isPVE)
+    {
+        headerText = "Player O (BOT) IS CHOOSING";
         headerColor = GRAY;
-    } else {
+    }
+    else
+    {
         headerText = "PLAYER O IS CHOOSING";
         headerColor = BLUE;
     }
@@ -493,39 +499,52 @@ void drawCaroGame(const MatchState &match, const UIState &ui)
         int screenW = GetScreenWidth();
         int screenH = GetScreenHeight();
 
-        // Lam toi toan man hinh
         DrawRectangle(0, 0, screenW, screenH, Fade(BLACK, 0.7f));
 
-        float panelW = 400; // Hoac screenW * 0.35f
-        float panelH = 300; // Hoac screenH * 0.40f
+        float panelW = screenW * 0.32f;
+        float panelH = screenH * 0.34f;
         float panelX = screenW / 2.0f - panelW / 2.0f;
         float panelY = screenH / 2.0f - panelH / 2.0f;
 
-        // Vẽ panel
-        DrawRectangle(panelX, panelY, panelW, panelH, buttonDarkPurple);
+        DrawRectangle((int)panelX, (int)panelY, (int)panelW, (int)panelH, buttonDarkPurple);
         DrawRectangleLinesEx({panelX, panelY, panelW, panelH}, 4, buttonYellow);
 
-        // Header
         const char *title = "PAUSED";
-        float titleSize = 50.0f;
-        Vector2 titleMeasure = MeasureTextEx(font8bit, title, titleSize, 2);
-        DrawTextEx(font8bit, title, {screenW / 2.0f - titleMeasure.x / 2.0f, panelY + 30}, titleSize, 2, WHITE);
+        float titleSize = screenH * 0.06f;
+        Vector2 titleMeasure = MeasureTextEx(font8bit, title, titleSize, 2.0f);
+        DrawTextEx(font8bit,
+                   title,
+                   {screenW / 2.0f - titleMeasure.x / 2.0f, panelY + panelH * 0.10f},
+                   titleSize, 2.0f, WHITE);
 
-        // Menu options
         const char *options[] = {"Save Game", "Exit to Menu"};
-        float gap = 70.0f;
-        float startY = panelY + 120.0f;
+        const int optionCount = 2;
 
-        for (int i = 0; i < 2; ++i)
+        float optionW = panelW * 0.70f;
+        float optionH = panelH * 0.18f;
+        float gap = panelH * 0.10f;
+        float startY = panelY + panelH * 0.36f;
+        float optionFontSize = optionH * 0.42f;
+
+        for (int i = 0; i < optionCount; ++i)
         {
-            Color color = (i == ui.pauseMenuIndex) ? buttonDarkPurple : buttonYellow;
-            Color bgColor = (i == ui.pauseMenuIndex) ? buttonYellow : BLANK;
+            bool isSelected = (i == ui.pauseMenuIndex);
 
-            float optY = startY + i * gap;
-            DrawRectangle(screenW / 2.0f - 150, optY - 10, 300, 50, bgColor);
+            Color bgColor = isSelected ? buttonYellow : Fade(BLACK, 0.35f);
+            Color borderColor = isSelected ? BLACK : buttonYellow;
+            Color textColor = isSelected ? buttonDarkPurple : buttonYellow;
 
-            Vector2 optSize = MeasureTextEx(font8bit, options[i], 30.0f, 2);
-            DrawTextEx(font8bit, options[i], {screenW / 2.0f - optSize.x / 2.0f, optY}, 30.0f, 2, color);
+            float optX = screenW / 2.0f - optionW / 2.0f;
+            float optY = startY + i * (optionH + gap);
+
+            DrawRectangle((int)optX, (int)optY, (int)optionW, (int)optionH, bgColor);
+            DrawRectangleLinesEx({optX, optY, optionW, optionH}, 3, borderColor);
+
+            Vector2 optSize = MeasureTextEx(font8bit, options[i], optionFontSize, 2.0f);
+            DrawTextEx(font8bit,
+                       options[i],
+                       {optX + (optionW - optSize.x) / 2.0f, optY + (optionH - optSize.y) / 2.0f},
+                       optionFontSize, 2.0f, textColor);
         }
     }
 }
@@ -695,14 +714,15 @@ void drawGameOver(const MatchState &match, const UIState &ui)
                {screenW / 2 - measureStat.x / 2, screenH * 0.4f + measure.y / 2}, 0.15f * screenH, 0.0, BLACK);
 }
 
-void drawBotDifficultyScreen(const UIState& ui) {
+void drawBotDifficultyScreen(const UIState &ui)
+{
     drawParallaxBackground(1.0f);
 
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    const char* title = "SELECT BOT DIFFICULTY";
-    const char* options[] = { "EASY", "MEDIUM", "HARD" };
+    const char *title = "SELECT BOT DIFFICULTY";
+    const char *options[] = {"EASY", "MEDIUM", "HARD"};
     const int totalOptions = 3;
 
     float titleFontSize = screenH * 0.07f;
@@ -715,8 +735,8 @@ void drawBotDifficultyScreen(const UIState& ui) {
 
     Vector2 titleSize = MeasureTextEx(font8bit, title, titleFontSize, spacing);
     DrawTextEx(font8bit, title,
-        { screenW / 2.0f - titleSize.x / 2.0f, screenH * 0.18f },
-        titleFontSize, spacing, buttonYellow);
+               {screenW / 2.0f - titleSize.x / 2.0f, screenH * 0.18f},
+               titleFontSize, spacing, buttonYellow);
 
     for (int i = 0; i < totalOptions; i++)
     {
@@ -730,16 +750,17 @@ void drawBotDifficultyScreen(const UIState& ui) {
         Color textColor = isSelected ? buttonDarkPurple : buttonYellow;
 
         DrawRectangle((int)posX, (int)posY, (int)rowWidth, (int)rowHeight, bgColor);
-        DrawRectangleLinesEx({ posX, posY, rowWidth, rowHeight }, 3, borderColor);
+        DrawRectangleLinesEx({posX, posY, rowWidth, rowHeight}, 3, borderColor);
 
         Vector2 textSize = MeasureTextEx(font8bit, options[i], optionFontSize, spacing);
         float textX = posX + (rowWidth - textSize.x) / 2.0f;
         float textY = posY + (rowHeight - textSize.y) / 2.0f;
 
-        DrawTextEx(font8bit, options[i], { textX, textY }, optionFontSize, spacing, textColor);
+        DrawTextEx(font8bit, options[i], {textX, textY}, optionFontSize, spacing, textColor);
     }
 }
-void drawLoadGameScreen(const UIState& ui, const std::vector<std::string>& saveFiles) {
+void drawLoadGameScreen(const UIState &ui, const std::vector<std::string> &saveFiles)
+{
     drawParallaxBackground(1.0f);
 
     int screenW = GetScreenWidth();
@@ -753,16 +774,16 @@ void drawLoadGameScreen(const UIState& ui, const std::vector<std::string>& saveF
     float rowFontSize = rowHeight * 0.42f;
     float spacing = 2.0f;
 
-    const char* title = "SELECT SAVE FILE";
+    const char *title = "SELECT SAVE FILE";
     Vector2 titleSize = MeasureTextEx(font8bit, title, titleFontSize, spacing);
     DrawTextEx(font8bit, title,
-        { screenW / 2.0f - titleSize.x / 2.0f, screenH * 0.10f },
-        titleFontSize, spacing, buttonYellow);
+               {screenW / 2.0f - titleSize.x / 2.0f, screenH * 0.10f},
+               titleFontSize, spacing, buttonYellow);
 
     if (saveFiles.empty())
     {
-        const char* msg1 = "No saves found in /saves folder.";
-        const char* msg2 = "Press ESC to return.";
+        const char *msg1 = "No saves found in /saves folder.";
+        const char *msg2 = "Press ESC to return.";
 
         float msg1Size = screenH * 0.035f;
         float msg2Size = screenH * 0.025f;
@@ -771,12 +792,12 @@ void drawLoadGameScreen(const UIState& ui, const std::vector<std::string>& saveF
         Vector2 m2 = MeasureTextEx(font8bit, msg2, msg2Size, 2.0f);
 
         DrawTextEx(font8bit, msg1,
-            { screenW / 2.0f - m1.x / 2.0f, screenH * 0.48f },
-            msg1Size, 2.0f, GRAY);
+                   {screenW / 2.0f - m1.x / 2.0f, screenH * 0.48f},
+                   msg1Size, 2.0f, GRAY);
 
         DrawTextEx(font8bit, msg2,
-            { screenW / 2.0f - m2.x / 2.0f, screenH * 0.55f },
-            msg2Size, 2.0f, DARKGRAY);
+                   {screenW / 2.0f - m2.x / 2.0f, screenH * 0.55f},
+                   msg2Size, 2.0f, DARKGRAY);
         return;
     }
 
@@ -792,7 +813,7 @@ void drawLoadGameScreen(const UIState& ui, const std::vector<std::string>& saveF
         float rowY = startY + i * (rowHeight + gap);
 
         DrawRectangle((int)rowX, (int)rowY, (int)rowWidth, (int)rowHeight, bgColor);
-        DrawRectangleLinesEx({ rowX, rowY, rowWidth, rowHeight }, 2, borderColor);
+        DrawRectangleLinesEx({rowX, rowY, rowWidth, rowHeight}, 2, borderColor);
 
         std::string displayName = formatSaveDisplayName(saveFiles[i]);
 
@@ -801,12 +822,13 @@ void drawLoadGameScreen(const UIState& ui, const std::vector<std::string>& saveF
         float textY = rowY + (rowHeight - textSize.y) / 2.0f;
 
         DrawTextEx(font8bit, displayName.c_str(),
-            { textX, textY },
-            rowFontSize, spacing, textColor);
+                   {textX, textY},
+                   rowFontSize, spacing, textColor);
     }
 }
 
-void drawSettingsScreen(const UIState& ui) {
+void drawSettingsScreen(const UIState &ui)
+{
     drawParallaxBackground(1.0f);
 
     int screenW = GetScreenWidth();
@@ -829,11 +851,11 @@ void drawSettingsScreen(const UIState& ui) {
     float rowFontSize = rowHeight * 0.40f;
     float spacing = 2.0f;
 
-    const char* title = "SETTINGS";
+    const char *title = "SETTINGS";
     Vector2 titleSize = MeasureTextEx(font8bit, title, titleFontSize, spacing);
     DrawTextEx(font8bit, title,
-        { screenW / 2.0f - titleSize.x / 2.0f, screenH * 0.10f },
-        titleFontSize, spacing, buttonYellow);
+               {screenW / 2.0f - titleSize.x / 2.0f, screenH * 0.10f},
+               titleFontSize, spacing, buttonYellow);
 
     for (int i = 0; i < (int)items.size(); i++)
     {
@@ -861,20 +883,20 @@ void drawSettingsScreen(const UIState& ui) {
         }
 
         DrawRectangle((int)rowX, (int)rowY, (int)rowWidth, (int)rowHeight, bgColor);
-        DrawRectangleLinesEx({ rowX, rowY, rowWidth, rowHeight }, 2, borderColor);
+        DrawRectangleLinesEx({rowX, rowY, rowWidth, rowHeight}, 2, borderColor);
 
         DrawTextEx(font8bit, items[i].c_str(),
-            { rowX + rowWidth * 0.04f, rowY + (rowHeight - rowFontSize) / 2.0f },
-            rowFontSize, spacing, textColor);
+                   {rowX + rowWidth * 0.04f, rowY + (rowHeight - rowFontSize) / 2.0f},
+                   rowFontSize, spacing, textColor);
 
         if (resolutionLocked)
         {
-            const char* locked = "LOCKED IN FULLSCREEN";
+            const char *locked = "LOCKED IN FULLSCREEN";
             float lockSize = rowHeight * 0.28f;
             Vector2 lockMeasure = MeasureTextEx(font8bit, locked, lockSize, 1.0f);
             DrawTextEx(font8bit, locked,
-                { rowX + rowWidth - lockMeasure.x - rowWidth * 0.04f, rowY + (rowHeight - lockMeasure.y) / 2.0f },
-                lockSize, 1.0f, Fade(RAYWHITE, 0.35f));
+                       {rowX + rowWidth - lockMeasure.x - rowWidth * 0.04f, rowY + (rowHeight - lockMeasure.y) / 2.0f},
+                       lockSize, 1.0f, Fade(RAYWHITE, 0.35f));
         }
     }
 }
