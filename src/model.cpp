@@ -328,8 +328,7 @@ void executeAttack(Player& attacker, Player& defender, int turnCount)
 // checkMatchResult:
 // kiểm tra xem trận đấu đã kết thúc chưa
 // nếu máu một bên = 0 thì bên kia thắng
-RoundResult checkMatchResult(const MatchState& matchState)
-{
+RoundResult checkMatchResult(const MatchState& matchState) {
     if (matchState.playerX.health <= 0)
         return O_WINS;
 
@@ -337,4 +336,21 @@ RoundResult checkMatchResult(const MatchState& matchState)
         return X_WINS;
 
     return ONGOING;
+
 }
+
+const ResolutionOption RESOLUTIONS[] =
+{
+    {1280,  720,  "1280x720 (16:9)"},
+    {1366,  768,  "1366x768 (16:9)"},
+    {1600,  900,  "1600x900 (16:9)"},
+    {1920, 1080,  "1920x1080 (16:9)"},
+    {1920, 1200,  "1920x1200 (16:10)"},
+    {2560, 1440,  "2560x1440 (16:9)"},
+    {2560, 1600,  "2560x1600 (16:10)"},
+    {2880, 1620,  "2880x1620 (16:9)"},
+    {2880, 1800,  "2880x1800 (16:10)"},
+    {3840, 2160,  "3840x2160 (16:9)"}
+};
+
+const int RESOLUTION_COUNT = sizeof(RESOLUTIONS) / sizeof(RESOLUTIONS[0]);

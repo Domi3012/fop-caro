@@ -1,12 +1,13 @@
 #include "controller.h"
 #include "view.h"
+#include "model.h"
 #include "save_manager.h"
 #include <ctime>
 #include "bot_ai.h"
 #include "audio_manager.h"
 
-static int wrapPrevIndex(int current, int total)
-{
+// Các hàm static xử lí về lựa chọn Index
+static int wrapPrevIndex(int current, int total) {
     if (total <= 0)
     {
         return 0;
@@ -15,8 +16,7 @@ static int wrapPrevIndex(int current, int total)
     return (current - 1 + total) % total;
 }
 
-static int wrapNextIndex(int current, int total)
-{
+static int wrapNextIndex(int current, int total) {
     if (total <= 0)
     {
         return 0;
@@ -25,31 +25,106 @@ static int wrapNextIndex(int current, int total)
     return (current + 1) % total;
 }
 
-struct ResolutionOption {
-    int width;
-    int height;
-    const char* label;
-};
+static int getPrevSettingsIndex(int current, bool isFullscreen) {
+    int idx = current;
 
-static const ResolutionOption RESOLUTIONS[] =
-{
-    {1280,  720,  "1280x720 (16:9)"},
-    {1366,  768,  "1366x768 (16:9)"},
-    {1600,  900,  "1600x900 (16:9)"},
-    {1920, 1080,  "1920x1080 (16:9)"},
-    {2560, 1440,  "2560x1440 (16:9)"}
-};
-static const int RESOLUTION_COUNT = sizeof(RESOLUTIONS) / sizeof(RESOLUTIONS[0]);
+    do
+    {
+        idx = wrapPrevIndex(idx, 7);
+    }
+    while (isFullscreen && idx == 1);
 
-// Áp dụng cài đặt hiển thị mới: Fullscreen và Resolution
-static void applyDisplaySettings(UIState &ui)
-{
-    const ResolutionOption &res = RESOLUTIONS[ui.resolutionIndex];
+    return idx;
+}
+
+static int getNextSettingsIndex(int current, bool isFullscreen) {
+    int idx = current;
+
+    do
+    {
+        idx = wrapNextIndex(idx, 7);
+    }
+    while (isFullscreen && idx == 1);
+
+    return idx;
+}
+
+// Các hàm static xử lí về Resolution
+
+static bool isResolutionAllowed(int width, int height) {
+    int monitor = GetCurrentMonitor();
+    return width <= GetMonitorWidth(monitor) && height <= GetMonitorHeight(monitor);
+}
+
+static int findPrevAllowedResolutionIndex(int current) {
+    for (int step = 1; step <= RESOLUTION_COUNT; step++)
+    {
+        int idx = (current - step + RESOLUTION_COUNT) % RESOLUTION_COUNT;
+        if (isResolutionAllowed(RESOLUTIONS[idx].width, RESOLUTIONS[idx].height))
+        {
+            return idx;
+        }
+    }
+
+    return current;
+}
+
+static int findNextAllowedResolutionIndex(int current) {
+    for (int step = 1; step <= RESOLUTION_COUNT; step++)
+    {
+        int idx = (current + step) % RESOLUTION_COUNT;
+        if (isResolutionAllowed(RESOLUTIONS[idx].width, RESOLUTIONS[idx].height))
+        {
+            return idx;
+        }
+    }
+
+    return current;
+}
+
+static void clampResolutionIndexToMonitor(UIState& ui) {
+    if (!isResolutionAllowed(RESOLUTIONS[ui.resolutionIndex].width,
+        RESOLUTIONS[ui.resolutionIndex].height))
+    {
+        for (int i = RESOLUTION_COUNT - 1; i >= 0; --i)
+        {
+            if (isResolutionAllowed(RESOLUTIONS[i].width, RESOLUTIONS[i].height))
+            {
+                ui.resolutionIndex = i;
+                return;
+            }
+        }
+
+        ui.resolutionIndex = 0;
+    }
+}
+static int clampResolutionIndex(int index) {
+    if (index < 0)
+    {
+        return 0;
+    }
+
+    if (index >= RESOLUTION_COUNT)
+    {
+        return RESOLUTION_COUNT - 1;
+    }
+
+    return index;
+}
+static void applyDisplaySettings(UIState& ui) {
+    ui.resolutionIndex = clampResolutionIndex(ui.resolutionIndex);
+    const ResolutionOption& res = RESOLUTIONS[ui.resolutionIndex];
+
+    int monitor = GetCurrentMonitor();
+    int monitorWidth = GetMonitorWidth(monitor);
+    int monitorHeight = GetMonitorHeight(monitor);
 
     if (ui.isFullscreen)
     {
         if (!IsWindowFullscreen())
         {
+            SetWindowSize(monitorWidth, monitorHeight);
+            SetWindowPosition(0, 0);
             ToggleFullscreen();
         }
     }
@@ -61,17 +136,11 @@ static void applyDisplaySettings(UIState &ui)
         }
 
         SetWindowSize(res.width, res.height);
-
-        int monitor = GetCurrentMonitor();
-        int monitorWidth = GetMonitorWidth(monitor);
-        int monitorHeight = GetMonitorHeight(monitor);
-
         SetWindowPosition(
             (monitorWidth - res.width) / 2,
             (monitorHeight - res.height) / 2);
     }
 }
-
 void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
 {
     RoundState &round = match.currentRound;
@@ -152,6 +221,7 @@ void handleMainMenuInput(UIState &ui)
         {
             ui.currentScreen = SETTINGS;
             ui.settingsMenuIndex = 0;
+            clampResolutionIndexToMonitor(ui);
             break;
         }
         case 3:
@@ -627,18 +697,19 @@ void handleLoadGameInput(MatchState &match, UIState &ui, const std::vector<std::
     }
 }
 
-void handleSettingsInput(UIState &ui)
-{
+void handleSettingsInput(UIState& ui) {
     const int SETTINGS_COUNT = 7;
 
     if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
     {
-        ui.settingsMenuIndex = wrapPrevIndex(ui.settingsMenuIndex, SETTINGS_COUNT);
+        ui.settingsMenuIndex = getPrevSettingsIndex(ui.settingsMenuIndex, ui.isFullscreen);
+        playSFX(SFX_CLICK);
     }
 
     if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
     {
-        ui.settingsMenuIndex = wrapNextIndex(ui.settingsMenuIndex, SETTINGS_COUNT);
+        ui.settingsMenuIndex = getNextSettingsIndex(ui.settingsMenuIndex, ui.isFullscreen);
+        playSFX(SFX_CLICK);
     }
 
     bool left = IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT);
@@ -652,31 +723,38 @@ void handleSettingsInput(UIState &ui)
         if (left || right || enter)
         {
             ui.isFullscreen = !ui.isFullscreen;
+            clampResolutionIndexToMonitor(ui);
             applyDisplaySettings(ui);
+
+            if (ui.isFullscreen)
+            {
+                ui.settingsMenuIndex = getNextSettingsIndex(0, true);
+            }
+
+            playSFX(SFX_CLICK);
         }
         break;
     }
 
     case 1:
     {
+        if (ui.isFullscreen)
+        {
+            break;
+        }
+
         if (left)
         {
-            ui.resolutionIndex = wrapPrevIndex(ui.resolutionIndex, RESOLUTION_COUNT);
-
-            if (!ui.isFullscreen)
-            {
-                applyDisplaySettings(ui);
-            }
+            ui.resolutionIndex = findPrevAllowedResolutionIndex(ui.resolutionIndex);
+            applyDisplaySettings(ui);
+            playSFX(SFX_CLICK);
         }
 
         if (right)
         {
-            ui.resolutionIndex = wrapNextIndex(ui.resolutionIndex, RESOLUTION_COUNT);
-
-            if (!ui.isFullscreen)
-            {
-                applyDisplaySettings(ui);
-            }
+            ui.resolutionIndex = findNextAllowedResolutionIndex(ui.resolutionIndex);
+            applyDisplaySettings(ui);
+            playSFX(SFX_CLICK);
         }
         break;
     }
@@ -686,6 +764,7 @@ void handleSettingsInput(UIState &ui)
         if (left || right || enter)
         {
             toggleMusicEnabled();
+            playSFX(SFX_CLICK);
         }
         break;
     }
@@ -709,6 +788,7 @@ void handleSettingsInput(UIState &ui)
         if (left || right || enter)
         {
             toggleSFXEnabled();
+            playSFX(SFX_CLICK);
         }
         break;
     }
@@ -733,6 +813,7 @@ void handleSettingsInput(UIState &ui)
         {
             ui.currentScreen = MAIN_MENU;
             ui.mainMenuIndex = 0;
+            playSFX(SFX_CLICK);
         }
         break;
     }
@@ -742,7 +823,10 @@ void handleSettingsInput(UIState &ui)
     {
         ui.currentScreen = MAIN_MENU;
         ui.mainMenuIndex = 0;
+        playSFX(SFX_CLICK);
     }
+
+    (void)SETTINGS_COUNT;
 }
 void handleBotDifficultyInput(UIState& ui) {
     const int totalOptions = 3;

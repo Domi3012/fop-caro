@@ -13,6 +13,7 @@ int const MAX_HEALTH = 100; // máu mặc định cho mọi nhân vật
 int const BOARD_SIZE = 12; // 12 x 12 ô cờ caro
 
 
+
 // II. Các enum:
 
 enum PlayerType {
@@ -56,6 +57,16 @@ struct MatchState {
 	RoundResult matchResult; // Kết quả của ván đấu
 };
 
+
+
+// Mô hình độ phân giải
+struct ResolutionOption {
+	int width;
+	int height;
+	const char* label;
+};
+extern const ResolutionOption RESOLUTIONS[];
+extern const int RESOLUTION_COUNT;
 
 // IV. Các hàm cần viết (to do của nhóm Model): 
 // Các hàm khởi tạo
