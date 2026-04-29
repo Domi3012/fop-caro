@@ -20,9 +20,10 @@ int main()
     ui.currentScreen = MAIN_MENU;
     ui.mainMenuIndex = 0;
     playMusic(BGM_MENU); // thêm nhạc nền menu khi vào game
-
     initRound(match.currentRound, 0);
-    while (!ui.shouldExit)
+
+    SetExitKey(0); // Vô hiệu hóa phím ESC để thoát toan bộ, chỉ cho phép thoát qua menu hoặc nút tắt cửa sổ
+    while (!ui.shouldExit && !WindowShouldClose())
     {
         handleInput(match, ui);
         updateAudioStream(); // thêm cập nhật music stream mỗi frame
