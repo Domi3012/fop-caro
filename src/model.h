@@ -9,8 +9,8 @@ using std::vector;
 
 // I. Các hằng số
 // 1. Hằng số chung
-int const MAX_HEALTH = 100; // máu mặc định cho mọi nhân vật
-int const BOARD_SIZE = 12; // 12 x 12 ô cờ caro
+constexpr int MAX_HEALTH = 100; // máu mặc định cho mọi nhân vật
+constexpr int BOARD_SIZE = 12; // 12 x 12 ô cờ caro
 
 
 
