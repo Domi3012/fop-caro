@@ -17,8 +17,8 @@ bool saveGame(const MatchState& match, const std::string& filename) {
     std::ofstream out("saves/" + filename);
     if (!out.is_open()) return false;
 
-    std::string nameX = match.playerX.Name.empty() ? "Player 1" : match.playerX.Name;
-    std::string nameO = match.playerO.Name.empty() ? "Player 2" : match.playerO.Name;
+    std::string nameX = match.playerX.name.empty() ? "Player 1" : match.playerX.name;
+    std::string nameO = match.playerO.name.empty() ? "Player 2" : match.playerO.name;
 
     // Lưu thông tin Player X
     out << nameX << "\n" 
@@ -58,12 +58,12 @@ bool loadGame(MatchState& match, const std::string& filename) {
     int charType, toMove, roundResult, matchResult;
 
     // Đọc Player X
-    std::getline(in >> std::ws, match.playerX.Name);
+    std::getline(in >> std::ws, match.playerX.name);
     in >> charType >> match.playerX.health;
     match.playerX.character = static_cast<CharacterType>(charType);
 
     // Đọc Player O
-    std::getline(in >> std::ws, match.playerO.Name);
+    std::getline(in >> std::ws, match.playerO.name);
     in >> charType >> match.playerO.health;
     match.playerO.character = static_cast<CharacterType>(charType);
 

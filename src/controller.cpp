@@ -6,147 +6,111 @@
 #include "bot_ai.h"
 #include "audio_manager.h"
 
-// Các hàm static xử lí về lựa chọn Index
-static int wrapPrevIndex(int current, int total) {
-    if (total <= 0)
-    {
-        return 0;
-    }
+// Input helpers: gom W/S/A/D và mũi tên thành một lần kiểm tra 
+inline bool isDirUp()    { return IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP); }
+inline bool isDirDown()  { return IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN); }
+inline bool isDirLeft()  { return IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT); }
+inline bool isDirRight() { return IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT); }
+inline bool isConfirm()  { return IsKeyPressed(KEY_ENTER); }
 
-    return (current - 1 + total) % total;
+// Wrap index: cuộn vòng danh sách menu 
+inline int wrapPrevIndex(int current, int total) {
+    return total <= 0 ? 0 : (current - 1 + total) % total;
+}
+inline int wrapNextIndex(int current, int total) {
+    return total <= 0 ? 0 : (current + 1) % total;
 }
 
-static int wrapNextIndex(int current, int total) {
-    if (total <= 0)
-    {
-        return 0;
-    }
-
-    return (current + 1) % total;
-}
-
+// Bỏ qua mục index 1 (Resolution) khi đang ở chế độ Fullscreen,
+// vì resolution không áp dụng cho fullscreen.
 static int getPrevSettingsIndex(int current, bool isFullscreen) {
     int idx = current;
-
-    do
-    {
-        idx = wrapPrevIndex(idx, 7);
-    }
-    while (isFullscreen && idx == 1);
-
+    do { idx = wrapPrevIndex(idx, 7); } while (isFullscreen && idx == 1);
     return idx;
 }
-
 static int getNextSettingsIndex(int current, bool isFullscreen) {
     int idx = current;
-
-    do
-    {
-        idx = wrapNextIndex(idx, 7);
-    }
-    while (isFullscreen && idx == 1);
-
+    do { idx = wrapNextIndex(idx, 7); } while (isFullscreen && idx == 1);
     return idx;
 }
 
-// Các hàm static xử lí về Resolution
+// Resolution helpers 
 
+// Kiểm tra độ phân giải có khớp với màn hình hiện tại không.
 static bool isResolutionAllowed(int width, int height) {
     int monitor = GetCurrentMonitor();
     return width <= GetMonitorWidth(monitor) && height <= GetMonitorHeight(monitor);
 }
 
-static int findPrevAllowedResolutionIndex(int current) {
-    for (int step = 1; step <= RESOLUTION_COUNT; step++)
-    {
-        int idx = (current - step + RESOLUTION_COUNT) % RESOLUTION_COUNT;
-        if (isResolutionAllowed(RESOLUTIONS[idx].width, RESOLUTIONS[idx].height))
-        {
+// Tìm index độ phân giải tiếp theo (step = +1 hoặc -1) mà màn hình hỗ trợ.
+// Nếu không tìm được, giữ nguyên current.
+static int stepResolutionIndex(int current, int step) {
+    for (int i = 1; i <= RESOLUTION_COUNT; i++) {
+        int idx = (current + step * i % RESOLUTION_COUNT + RESOLUTION_COUNT) % RESOLUTION_COUNT;
+        if (isResolutionAllowed(RESOLUTIONS[idx].width, RESOLUTIONS[idx].height)) {
             return idx;
         }
     }
-
     return current;
 }
 
-static int findNextAllowedResolutionIndex(int current) {
-    for (int step = 1; step <= RESOLUTION_COUNT; step++)
-    {
-        int idx = (current + step) % RESOLUTION_COUNT;
-        if (isResolutionAllowed(RESOLUTIONS[idx].width, RESOLUTIONS[idx].height))
-        {
-            return idx;
-        }
-    }
-
-    return current;
-}
-
+// Đảm bảo resolutionIndex không vượt quá kích thước màn hình.
+// Gọi khi chuyển từ cửa sổ sang fullscreen hoặc khi vào màn Settings.
 static void clampResolutionIndexToMonitor(UIState& ui) {
-    if (!isResolutionAllowed(RESOLUTIONS[ui.resolutionIndex].width,
-        RESOLUTIONS[ui.resolutionIndex].height))
-    {
-        for (int i = RESOLUTION_COUNT - 1; i >= 0; --i)
-        {
-            if (isResolutionAllowed(RESOLUTIONS[i].width, RESOLUTIONS[i].height))
-            {
-                ui.resolutionIndex = i;
-                return;
-            }
+    if (isResolutionAllowed(RESOLUTIONS[ui.resolutionIndex].width, RESOLUTIONS[ui.resolutionIndex].height)) {
+        return; // Index hiện tại vẫn hợp lệ, không cần clamp
+    }
+    // Duyệt từ cao xuống thấp để chọn độ phân giải lớn nhất còn khớp
+    for (int i = RESOLUTION_COUNT - 1; i >= 0; --i) {
+        if (isResolutionAllowed(RESOLUTIONS[i].width, RESOLUTIONS[i].height)) {
+            ui.resolutionIndex = i;
+            return;
         }
-
-        ui.resolutionIndex = 0;
     }
+    ui.resolutionIndex = 0; // Fallback: 640×360
 }
-static int clampResolutionIndex(int index) {
-    if (index < 0)
-    {
-        return 0;
-    }
 
-    if (index >= RESOLUTION_COUNT)
-    {
-        return RESOLUTION_COUNT - 1;
-    }
-
-    return index;
-}
+// Áp dụng cài đặt fullscreen / độ phân giải vào cửa sổ raylib.
+// Gọi mỗi khi người dùng thay đổi một trong hai cài đặt trên.
 static void applyDisplaySettings(UIState& ui) {
-    ui.resolutionIndex = clampResolutionIndex(ui.resolutionIndex);
+    // Clamp index trước để tránh truy cập ngoài mảng
+    ui.resolutionIndex = (ui.resolutionIndex < 0) ? 0 :
+                         (ui.resolutionIndex >= RESOLUTION_COUNT) ? RESOLUTION_COUNT - 1 : ui.resolutionIndex;
+
     const ResolutionOption& res = RESOLUTIONS[ui.resolutionIndex];
-
     int monitor = GetCurrentMonitor();
-    int monitorWidth = GetMonitorWidth(monitor);
-    int monitorHeight = GetMonitorHeight(monitor);
+    int mWidth  = GetMonitorWidth(monitor);
+    int mHeight = GetMonitorHeight(monitor);
 
-    if (ui.isFullscreen)
-    {
-        if (!IsWindowFullscreen())
-        {
-            SetWindowSize(monitorWidth, monitorHeight);
+    if (ui.isFullscreen) {
+        if (!IsWindowFullscreen()) {
+            SetWindowSize(mWidth, mHeight);
             SetWindowPosition(0, 0);
             ToggleFullscreen();
         }
-    }
-    else
-    {
-        if (IsWindowFullscreen())
-        {
-            ToggleFullscreen();
-        }
-
+    } else {
+        if (IsWindowFullscreen()) ToggleFullscreen();
         SetWindowSize(res.width, res.height);
-        SetWindowPosition(
-            (monitorWidth - res.width) / 2,
-            (monitorHeight - res.height) / 2);
+
+        if (res.width >= mWidth && res.height >= mHeight) {
+            MaximizeWindow();
+        } else {
+            int posX = (mWidth  - res.width)  / 2;
+            int posY = (mHeight - res.height) / 2;
+            SetWindowPosition(posX, posY);
+        }
     }
 }
+// Xử lý một nước đi tại ô (x=row, y=col):
+//   1. Kiểm tra nước đi hợp lệ.
+//   2. Ghi nước đi vào board.
+//   3. Kiểm tra kết quả round → nếu thắng thì tính sát thương và kiểm tra match.
+//   4. Cập nhật ui.currentScreen tương ứng.
 void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
 {
     RoundState &round = match.currentRound;
 
-    if (!checkValidMove(round, x, y))
-    {
+    if (!checkValidMove(round, x, y)){
         return;
     }
 
@@ -158,10 +122,12 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
         round.result = rr;
         match.countRoundsPlayed++;
 
+        // Người thắng tấn công, người thua nhận sát thương
         Player &attacker = (rr == X_WINS) ? match.playerX : match.playerO;
         Player &defender = (rr == X_WINS) ? match.playerO : match.playerX;
         executeAttack(attacker, defender, round.turnCount);
 
+        // Kiểm tra xem trận đấu tổng đã có người thắng chưa
         RoundResult mr = checkMatchResult(match);
         if (mr == X_WINS || mr == O_WINS)
         {
@@ -179,6 +145,7 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
         match.countRoundsPlayed++;
         ui.currentScreen = ROUND_OVER;
     }
+    // rr == ONGOING: không làm gì, game tiếp tục
 }
 
 // handleMainMenuInput:
@@ -188,19 +155,19 @@ void handleMainMenuInput(UIState &ui)
 {
     const int totalOptions = 4;
 
-    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    if (isDirUp())
     {
         ui.mainMenuIndex = wrapPrevIndex(ui.mainMenuIndex, totalOptions);
         playSFX(SFX_CLICK);
     }
 
-    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    if (isDirDown())
     {
         ui.mainMenuIndex = wrapNextIndex(ui.mainMenuIndex, totalOptions);
         playSFX(SFX_CLICK);
     }
 
-    if (IsKeyPressed(KEY_ENTER))
+    if (isConfirm())
     {
         playSFX(SFX_CLICK);
         switch (ui.mainMenuIndex)
@@ -240,7 +207,7 @@ void handleMainMenuInput(UIState &ui)
 // O chọn xong -> initMatch và chuyển sang GAME_BOARD
 void handleCharSelectionInput(MatchState &match, UIState &ui)
 {
-    if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT))
+    if (isDirLeft())
     {
         if (ui.characterMenuIndex > 1) {
             ui.characterMenuIndex--;
@@ -248,7 +215,7 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
         }
     }
 
-    if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT))
+    if (isDirRight())
     {
         if (ui.characterMenuIndex < 3) {
             ui.characterMenuIndex++;
@@ -256,7 +223,7 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
         }
     }
 
-    if (IsKeyPressed(KEY_ENTER))
+    if (isConfirm())
     {
         // ánh xạ index -> CharacterType
         CharacterType chosen;
@@ -322,17 +289,17 @@ void handleGameplayInput(MatchState &match, UIState &ui)
     {
         const int pauseOptionCount = 2;
 
-        if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+        if (isDirUp())
         {
             ui.pauseMenuIndex = wrapPrevIndex(ui.pauseMenuIndex, pauseOptionCount);
         }
 
-        if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+        if (isDirDown())
         {
             ui.pauseMenuIndex = wrapNextIndex(ui.pauseMenuIndex, pauseOptionCount);
         }
 
-        if (IsKeyPressed(KEY_ENTER))
+        if (isConfirm())
         {
             if (ui.pauseMenuIndex == 0)
             {
@@ -379,7 +346,7 @@ void handleGameplayInput(MatchState &match, UIState &ui)
 
     // Di chuyển con trỏ
     // W/S/up/down sẽ là cursorY vì di chuyển theo chiều dọc (col)
-    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    if (isDirUp())
     {
         if (ui.cursorY > 0)
         {
@@ -387,15 +354,15 @@ void handleGameplayInput(MatchState &match, UIState &ui)
         }
     }
 
-    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    if (isDirDown())
     {
         if (ui.cursorY < BOARD_SIZE - 1)
         {
             ui.cursorY++;
         }
     }
-    // A/D/right/left sẽ là cursorX vì di chuyển theo chiều dọc (col)
-    if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT))
+    // A/D/left/right điều khiển cursorX (cột — chiều ngang)
+    if (isDirLeft())
     {
         if (ui.cursorX > 0)
         {
@@ -403,7 +370,7 @@ void handleGameplayInput(MatchState &match, UIState &ui)
         }
     }
 
-    if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT))
+    if (isDirRight())
     {
         if (ui.cursorX < BOARD_SIZE - 1)
         {
@@ -412,7 +379,7 @@ void handleGameplayInput(MatchState &match, UIState &ui)
     }
 
     // Đặt quân
-    if (IsKeyPressed(KEY_ENTER))
+    if (isConfirm())
     {
         GameScreen prevGameScreen = ui.currentScreen;
         processMoveAndResult(match, ui, ui.cursorY, ui.cursorX);
@@ -431,17 +398,20 @@ void handleGameplayInput(MatchState &match, UIState &ui)
             return;
         }
 
+        // Chế độ PVE: sau nước đi của người chơi, bot đi ngay trong cùng frame
         if (ui.isPVE && match.currentRound.toMove == O)
         {
             auto botMove = getBestMove(match.currentRound, O, ui.botDifficulty);
-            if (botMove.first == -1) 
+            if (botMove.first == -1)
             {
-                match.currentRound.result = DRAW;   // Ghi nhận Hòa
-                match.countRoundsPlayed++;          // Tăng số round đã chơi
-                ui.currentScreen = ROUND_OVER;      // Chuyển màn hình kết thúc
-                ui.roundOverTimer = 0.0f;           // Reset timer cho hiệu ứng chuyển cảnh
+                // Bot không tìm được ô hợp lệ → bàn cờ đầy, xử lý hòa thủ công
+                match.currentRound.result = DRAW;
+                match.countRoundsPlayed++;
+                ui.currentScreen  = ROUND_OVER;
+                ui.roundOverTimer = 0.0f;
             }
-            else{
+            else
+            {
                 processMoveAndResult(match, ui, botMove.first, botMove.second);
             }
         }
@@ -483,7 +453,7 @@ void handleRoundOverInput(MatchState &match, UIState &ui)
 // ESC   -> thoát game (đóng cửa sổ raylib)
 void handleGameOverInput(MatchState &match, UIState &ui)
 {
-    if (IsKeyPressed(KEY_ENTER))
+    if (isConfirm())
     {
         ui.currentScreen = MAIN_MENU;
         ui.mainMenuIndex = 0;
@@ -530,19 +500,19 @@ void handleModeSelectionInput(UIState &ui)
 {
     const int modeCount = 2;
 
-    if (IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT) ||
-        IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    if (isDirLeft() ||
+        isDirUp())
     {
         ui.modeMenuIndex = wrapPrevIndex(ui.modeMenuIndex, modeCount);
     }
 
-    if (IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT) ||
-        IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    if (isDirRight() ||
+        isDirDown())
     {
         ui.modeMenuIndex = wrapNextIndex(ui.modeMenuIndex, modeCount);
     }
 
-    if (IsKeyPressed(KEY_ENTER))
+    if (isConfirm())
     {
         ui.isPVE = (ui.modeMenuIndex == 1);
 
@@ -570,7 +540,7 @@ void handleModeSelectionInput(UIState &ui)
 void handleGameIntroInput(MatchState &match, UIState &ui)
 {
     // Skip intro
-    if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+    if (isConfirm() || IsKeyPressed(KEY_SPACE))
     {
         ui.introCamX = 0.0f;
         startMatch(ui);
@@ -580,11 +550,11 @@ void handleGameIntroInput(MatchState &match, UIState &ui)
     float dt = GetFrameTime();
     ui.roundOverTimer += dt;
 
-    float totalTime = 3.5f; // Epic intro keo dai 3.5s
-    float totalDistance = (float)GetScreenWidth() * 5.0f;
+    // Camera bay từ phải sang trái trong 3.5 giây
+    const float totalTime     = 3.5f;
+    const float totalDistance = (float)GetScreenWidth() * 5.0f;
 
-    // Su dung Smootherstep ease-in-out: E'(p) = 30 * p^2 * (1-p)^2
-    float p = ui.roundOverTimer / totalTime;
+    float p = ui.roundOverTimer / totalTime; // Tiến độ [0, 1]
     if (p >= 1.0f)
     {
         ui.introCamX = 0.0f;
@@ -606,18 +576,18 @@ void handleGameIntroInput(MatchState &match, UIState &ui)
     (void)match;
 }
 
-// handleInput:
-// Dispatcher trung tâm, gọi đúng handler theo màn hình hiện tại
+// Dispatcher trung tâm — gọi đúng handler theo ui.currentScreen mỗi frame.
 void handleInput(MatchState &match, UIState &ui)
 {
-    // Lấy danh sách save files một lần để tránh gọi nhiều lần trong 1 frame
+    // Cache danh sách save file dưới dạng biến static:
+    // chỉ refresh khi người dùng vừa chuyển sang màn LOAD_GAME.
     static std::vector<std::string> cachedSaveFiles;
 
     switch (ui.currentScreen)
     {
     case MAIN_MENU:
         handleMainMenuInput(ui);
-        // Khi vừa chuyển vào màn LOAD_GAME, refresh danh sách file save
+        // Refresh ngay sau khi handleMainMenuInput() chuyển sang LOAD_GAME
         if (ui.currentScreen == LOAD_GAME)
             cachedSaveFiles = getSaveFilesList();
         break;
@@ -664,7 +634,7 @@ void handleLoadGameInput(MatchState &match, UIState &ui, const std::vector<std::
 {
     if (saveFiles.empty())
     {
-        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER))
+        if (IsKeyPressed(KEY_ESCAPE) || isConfirm())
         {
             ui.currentScreen = MAIN_MENU;
         }
@@ -673,17 +643,17 @@ void handleLoadGameInput(MatchState &match, UIState &ui, const std::vector<std::
 
     const int totalSaves = (int)saveFiles.size();
 
-    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    if (isDirUp())
     {
         ui.loadMenuIndex = wrapPrevIndex(ui.loadMenuIndex, totalSaves);
     }
 
-    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    if (isDirDown())
     {
         ui.loadMenuIndex = wrapNextIndex(ui.loadMenuIndex, totalSaves);
     }
 
-    if (IsKeyPressed(KEY_ENTER))
+    if (isConfirm())
     {
         if (loadGame(match, saveFiles[ui.loadMenuIndex]))
         {
@@ -700,21 +670,21 @@ void handleLoadGameInput(MatchState &match, UIState &ui, const std::vector<std::
 void handleSettingsInput(UIState& ui) {
     const int SETTINGS_COUNT = 7;
 
-    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    if (isDirUp())
     {
         ui.settingsMenuIndex = getPrevSettingsIndex(ui.settingsMenuIndex, ui.isFullscreen);
         playSFX(SFX_CLICK);
     }
 
-    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    if (isDirDown())
     {
         ui.settingsMenuIndex = getNextSettingsIndex(ui.settingsMenuIndex, ui.isFullscreen);
         playSFX(SFX_CLICK);
     }
 
-    bool left = IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT);
-    bool right = IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT);
-    bool enter = IsKeyPressed(KEY_ENTER);
+    bool left = isDirLeft();
+    bool right = isDirRight();
+    bool enter = isConfirm();
 
     switch (ui.settingsMenuIndex)
     {
@@ -745,14 +715,14 @@ void handleSettingsInput(UIState& ui) {
 
         if (left)
         {
-            ui.resolutionIndex = findPrevAllowedResolutionIndex(ui.resolutionIndex);
+            ui.resolutionIndex = stepResolutionIndex(ui.resolutionIndex, -1);
             applyDisplaySettings(ui);
             playSFX(SFX_CLICK);
         }
 
         if (right)
         {
-            ui.resolutionIndex = findNextAllowedResolutionIndex(ui.resolutionIndex);
+            ui.resolutionIndex = stepResolutionIndex(ui.resolutionIndex, 1);
             applyDisplaySettings(ui);
             playSFX(SFX_CLICK);
         }
@@ -831,36 +801,19 @@ void handleSettingsInput(UIState& ui) {
 void handleBotDifficultyInput(UIState& ui) {
     const int totalOptions = 3;
 
-    if (IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP))
+    if (isDirUp())
     {
         ui.botDifficultyIndex = (ui.botDifficultyIndex - 1 + totalOptions) % totalOptions;
     }
 
-    if (IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN))
+    if (isDirDown())
     {
         ui.botDifficultyIndex = (ui.botDifficultyIndex + 1) % totalOptions;
     }
 
-    if (IsKeyPressed(KEY_ENTER))
+    if (isConfirm())
     {
-        switch (ui.botDifficultyIndex)
-        {
-        case 0:
-        {
-            ui.botDifficulty = EASY;
-            break;
-        }
-        case 1:
-        {
-            ui.botDifficulty = MEDIUM;
-            break;
-        }
-        case 2:
-        {
-            ui.botDifficulty = HARD;
-            break;
-        }
-        }
+        ui.botDifficulty = static_cast<BotDifficulty>(ui.botDifficultyIndex);
 
         ui.currentScreen = CHARACTER_SELECTION;
         ui.isSelectingX = true;
