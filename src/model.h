@@ -7,75 +7,84 @@ using std::string;
 using std::vector;
 
 
-// I. Các hằng số
-// 1. Hằng số chung
-constexpr int MAX_HEALTH = 100; // máu mặc định cho mọi nhân vật
-constexpr int BOARD_SIZE = 12; // 12 x 12 ô cờ caro
+// ============================================================
+// I. Hằng số
+// ============================================================
+
+constexpr int MAX_HEALTH = 100;  // Máu tối đa của mỗi nhân vật
+constexpr int BOARD_SIZE = 12;   // Kích thước bàn cờ (12 x 12)
+
+// Số quân liên tiếp tối thiểu để thắng
+constexpr int WIN_LENGTH = 5;
 
 
+// ============================================================
+// II. Enum
+// ============================================================
 
-// II. Các enum:
+enum PlayerType   { X, O, NONE };
+enum CharacterType { ASSASSIN, BRUISER, VAMPIRE };
+enum RoundResult  { ONGOING, DRAW, X_WINS, O_WINS };
 
-enum PlayerType {
-	X, O, NONE
+
+// ============================================================
+// III. Struct dữ liệu trò chơi
+// ============================================================
+
+struct Player
+{
+    string        name;
+    CharacterType character;
+    int           health = MAX_HEALTH;
 };
 
-enum CharacterType {
-	ASSASSIN, BRUISER, VAMPIRE
+struct RoundState
+{
+    PlayerType               toMove;
+    int                      turnCount;
+    vector<vector<PlayerType>> board;
+    RoundResult              result;
+    vector<std::pair<int,int>> winningCells;
 };
 
-enum RoundResult{
-	ONGOING, DRAW, X_WINS, O_WINS
+struct MatchState
+{
+    Player     playerX;
+    Player     playerO;
+    RoundState currentRound;
+    int        countRoundsPlayed;
+    RoundResult matchResult;
 };
 
-
-// III. Các struct mô hình dữ liệu trò chơi:
-
-// Mô hình 1 người chơi (mỗi ván có 2 người)
-struct Player {
-	string Name;
-	CharacterType character; // Loại nhân vật
-	int health = MAX_HEALTH; // Mặc định là 100
+struct ResolutionOption
+{
+    int         width;
+    int         height;
+    const char* label;
 };
 
-// Mô hình một vòng đấu (một game cờ caro)
-struct RoundState {
-	PlayerType toMove;
-	int turnCount; // Số lượt đã chơi
-	vector<vector<PlayerType>> board; // Bàn cờ
-	RoundResult result; // Kết quả của vòng đấu
-
-	std::vector<std::pair<int, int>> winningCells;
-};
-
-// Mô hình một ván đấu (gồm nhiều game cờ caro)
-struct MatchState {
-	Player playerX;
-	Player playerO;
-	RoundState currentRound;
-	int countRoundsPlayed; // Số vòng đã chơi
-	RoundResult matchResult; // Kết quả của ván đấu
-};
-
-
-
-// Mô hình độ phân giải
-struct ResolutionOption {
-	int width;
-	int height;
-	const char* label;
-};
 extern const ResolutionOption RESOLUTIONS[];
-extern const int RESOLUTION_COUNT;
+extern const int              RESOLUTION_COUNT;
 
-// IV. Các hàm cần viết (to do của nhóm Model): 
-// Các hàm khởi tạo
-void initMatch(MatchState& matchState, const Player& playerX, const Player& playerY); // Gọi initRound và set giá trị
-void initRound(RoundState& roundState, int roundCount); // Vòng lẻ X đi trước, vòng chẵn O đi trước
 
-// Các hàm xử lý logic trò chơi
-bool checkValidMove(const RoundState& roundState, int x, int y); // Kiểm tra nước đi hợp lệ, cần viết để bổ trợ mấy lớp khác
-void makeMove(RoundState& roundState, int x, int y); // Thực hiện nước đi, cập nhật board và turnCount
-RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int lastMoveY); // Kiểm tra kết quả vòng đấu sau mỗi nước đi
-void executeAttack(Player& attacker, Player& defender, int turnCount); // Thực hiện tính toán damage raw và áp dụng các hiệu ứng dựa trên loại nhân vật. Nhớ xử lí các trường hợp biên < 0 hay > 100
-RoundResult checkMatchResult(const MatchState& matchState); // Kiểm tra kết quả ván đấu sau mỗi vòng đấu (sau mỗi lần attack)
+// ============================================================
+// IV. Hàm khởi tạo
+// ============================================================
+
+void initMatch(MatchState& matchState,
+               const Player& playerX,
+               const Player& playerO);
+
+// roundCount chẵn → X đi trước; lẻ → O đi trước
+void initRound(RoundState& roundState, int roundCount);
+
+
+// ============================================================
+// V. Hàm xử lý logic trò chơi
+// ============================================================
+
+bool        checkValidMove  (const RoundState& roundState, int x, int y);
+void        makeMove        (RoundState& roundState, int x, int y);
+RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int lastMoveY);
+void        executeAttack   (Player& attacker, Player& defender, int turnCount);
+RoundResult checkMatchResult(const MatchState& matchState);
