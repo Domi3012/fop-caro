@@ -23,43 +23,11 @@ namespace
 
     int g_currentMusic = -1;
 
+    // === Utility Functions ===
+
     float clamp01(float value)
     {
         return std::max(0.0f, std::min(1.0f, value));
-    }
-
-    const char *getSFXPath(SoundEffect sfx)
-    {
-        switch (sfx)
-        {
-        case SFX_CLICK:
-            return "assets/sounds/sfx_click.wav";
-        case SFX_PLACE:
-            return "assets/sounds/sfx_place.wav";
-        case SFX_ATTACK:
-            return "assets/sounds/sfx_attack.wav";
-        case SFX_HEAL:
-            return "assets/sounds/sfx_heal.wav";
-        case SFX_WIN:
-            return "assets/sounds/sfx_win.wav";
-        case SFX_GAME_OVER:
-            return "assets/sounds/sfx_game_over.wav";
-        default:
-            return nullptr;
-        }
-    }
-
-    const char *getMusicPath(MusicTrack track)
-    {
-        switch (track)
-        {
-        case BGM_MENU:
-            return "assets/sounds/bgm_menu.ogg";
-        case BGM_BATTLE:
-            return "assets/sounds/bgm_battle.ogg";
-        default:
-            return nullptr;
-        }
     }
 
     bool isValidSFX(SoundEffect sfx)
@@ -73,6 +41,34 @@ namespace
         const int index = static_cast<int>(track);
         return index >= 0 && index < MUSIC_COUNT;
     }
+
+    // === Path Resolvers ===
+
+    const char *getSFXPath(SoundEffect sfx)
+    {
+        switch (sfx)
+        {
+        case SFX_CLICK:     return "assets/sounds/sfx_click.wav";
+        case SFX_PLACE:     return "assets/sounds/sfx_place.wav";
+        case SFX_ATTACK:    return "assets/sounds/sfx_attack.wav";
+        case SFX_HEAL:      return "assets/sounds/sfx_heal.wav";
+        case SFX_WIN:       return "assets/sounds/sfx_win.wav";
+        case SFX_GAME_OVER: return "assets/sounds/sfx_game_over.wav";
+        default:            return nullptr;
+        }
+    }
+
+    const char *getMusicPath(MusicTrack track)
+    {
+        switch (track)
+        {
+        case BGM_MENU:      return "assets/sounds/bgm_menu.ogg";
+        case BGM_BATTLE:    return "assets/sounds/bgm_battle.ogg";
+        default:            return nullptr;
+        }
+    }
+
+    // === Audio Application Functions ===
 
     void applySFXVolume()
     {
@@ -99,7 +95,93 @@ namespace
             }
         }
     }
+
+    void updateCurrentMusicState()
+    {
+        if (g_currentMusic < 0 || !g_musicLoaded[g_currentMusic])
+        {
+            return;
+        }
+
+        if (g_musicEnabled)
+        {
+            if (!IsMusicStreamPlaying(g_music[g_currentMusic]))
+            {
+                PlayMusicStream(g_music[g_currentMusic]);
+            }
+        }
+        else
+        {
+            PauseMusicStream(g_music[g_currentMusic]);
+        }
+    }
+
+    // === Loading & Unloading Helpers ===
+
+    void loadAllSFX()
+    {
+        for (int i = 0; i < SOUND_COUNT; ++i)
+        {
+            const SoundEffect sfx = static_cast<SoundEffect>(i);
+            const char *path = getSFXPath(sfx);
+
+            if (path == nullptr || !FileExists(path))
+            {
+                TraceLog(LOG_WARNING, "[Audio] Missing SFX file: %s", path ? path : "(null)");
+                continue;
+            }
+
+            g_sfx[i] = LoadSound(path);
+            g_sfxLoaded[i] = true;
+        }
+    }
+
+    void loadAllMusic()
+    {
+        for (int i = 0; i < MUSIC_COUNT; ++i)
+        {
+            const MusicTrack track = static_cast<MusicTrack>(i);
+            const char *path = getMusicPath(track);
+
+            if (path == nullptr || !FileExists(path))
+            {
+                TraceLog(LOG_WARNING, "[Audio] Missing music file: %s", path ? path : "(null)");
+                continue;
+            }
+
+            g_music[i] = LoadMusicStream(path);
+            g_musicLoaded[i] = true;
+        }
+    }
+
+    void unloadAllSFX()
+    {
+        for (int i = 0; i < SOUND_COUNT; ++i)
+        {
+            if (g_sfxLoaded[i])
+            {
+                UnloadSound(g_sfx[i]);
+                g_sfxLoaded[i] = false;
+            }
+        }
+    }
+
+    void unloadAllMusic()
+    {
+        for (int i = 0; i < MUSIC_COUNT; ++i)
+        {
+            if (g_musicLoaded[i])
+            {
+                UnloadMusicStream(g_music[i]);
+                g_musicLoaded[i] = false;
+            }
+        }
+    }
 }
+
+// ========================================================
+// Public API
+// ========================================================
 
 void initAudio()
 {
@@ -113,35 +195,8 @@ void initAudio()
         InitAudioDevice();
     }
 
-    for (int i = 0; i < SOUND_COUNT; ++i)
-    {
-        const SoundEffect sfx = static_cast<SoundEffect>(i);
-        const char *path = getSFXPath(sfx);
-
-        if (path == nullptr || !FileExists(path))
-        {
-            TraceLog(LOG_WARNING, "[Audio] Missing SFX file: %s", path ? path : "(null)");
-            continue;
-        }
-
-        g_sfx[i] = LoadSound(path);
-        g_sfxLoaded[i] = true;
-    }
-
-    for (int i = 0; i < MUSIC_COUNT; ++i)
-    {
-        const MusicTrack track = static_cast<MusicTrack>(i);
-        const char *path = getMusicPath(track);
-
-        if (path == nullptr || !FileExists(path))
-        {
-            TraceLog(LOG_WARNING, "[Audio] Missing music file: %s", path ? path : "(null)");
-            continue;
-        }
-
-        g_music[i] = LoadMusicStream(path);
-        g_musicLoaded[i] = true;
-    }
+    loadAllSFX();
+    loadAllMusic();
 
     applySFXVolume();
     applyMusicVolume();
@@ -158,23 +213,8 @@ void unloadAudio()
 
     stopMusic();
 
-    for (int i = 0; i < SOUND_COUNT; ++i)
-    {
-        if (g_sfxLoaded[i])
-        {
-            UnloadSound(g_sfx[i]);
-            g_sfxLoaded[i] = false;
-        }
-    }
-
-    for (int i = 0; i < MUSIC_COUNT; ++i)
-    {
-        if (g_musicLoaded[i])
-        {
-            UnloadMusicStream(g_music[i]);
-            g_musicLoaded[i] = false;
-        }
-    }
+    unloadAllSFX();
+    unloadAllMusic();
 
     g_currentMusic = -1;
     g_audioInitialized = false;
@@ -232,14 +272,7 @@ void playMusic(MusicTrack track)
 
     if (g_currentMusic == index)
     {
-        if (g_musicEnabled)
-        {
-            SetMusicVolume(g_music[index], g_musicVolume);
-            if (!IsMusicStreamPlaying(g_music[index]))
-            {
-                PlayMusicStream(g_music[index]);
-            }
-        }
+        updateCurrentMusicState();
         return;
     }
 
@@ -306,23 +339,7 @@ void toggleMusicEnabled()
     }
 
     applyMusicVolume();
-
-    if (g_currentMusic < 0 || !g_musicLoaded[g_currentMusic])
-    {
-        return;
-    }
-
-    if (g_musicEnabled)
-    {
-        if (!IsMusicStreamPlaying(g_music[g_currentMusic]))
-        {
-            PlayMusicStream(g_music[g_currentMusic]);
-        }
-    }
-    else
-    {
-        PauseMusicStream(g_music[g_currentMusic]);
-    }
+    updateCurrentMusicState();
 }
 
 void toggleSFXEnabled()
@@ -336,18 +353,23 @@ void toggleSFXEnabled()
 
     applySFXVolume();
 }
-bool isMusicEnabled() {
+
+bool isMusicEnabled()
+{
     return g_musicEnabled;
 }
 
-bool isSFXEnabled() {
+bool isSFXEnabled()
+{
     return g_sfxEnabled;
 }
 
-float getMusicVolume() {
+float getMusicVolume()
+{
     return g_musicVolume;
 }
 
-float getSFXVolume() {
+float getSFXVolume()
+{
     return g_sfxVolume;
 }
