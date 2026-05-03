@@ -1,356 +1,198 @@
 #include "model.h"
-#include <cstdlib> // dùng cho rand()
+#include <cstdlib>
 
 
-// ======================================================
-// Các hàm khởi tạo
-// ======================================================
+// ============================================================
+// Hằng số nội bộ cho executeAttack
+// ============================================================
+
+static constexpr int ASSASSIN_EARLY_DAMAGE      = 35;
+static constexpr int ASSASSIN_MID_DAMAGE_BASE   = 60;
+static constexpr int ASSASSIN_MID_DAMAGE_BONUS  = 20;
+
+static constexpr int BRUISER_DAMAGE             = 60;
+
+static constexpr int VAMPIRE_DAMAGE             = 50;
+static constexpr int VAMPIRE_HEAL_BASE          = 15;
+static constexpr int VAMPIRE_HEAL_RANDOM        = 11; // rand() % VAMPIRE_HEAL_RANDOM
 
 
-// initMatch: khởi tạo toàn bộ trạng thái của một ván đấu
-// - gán player X và player O
-// - reset máu về MAX_HEALTH
-// - reset số round đã chơi
-// - gọi initRound để tạo round đầu tiên
-void initMatch(MatchState& matchState, const Player& playerX, const Player& playerY)
+// ============================================================
+// Khởi tạo
+// ============================================================
+
+void initMatch(MatchState& matchState,
+               const Player& playerX,
+               const Player& playerO)
 {
-    // gán thông tin player
     matchState.playerX = playerX;
-    matchState.playerO = playerY;
+    matchState.playerO = playerO;
 
-    // đảm bảo máu bắt đầu là MAX_HEALTH
-    matchState.playerX.health = MAX_HEALTH;
-    matchState.playerO.health = MAX_HEALTH;
-
-    // chưa chơi round nào
+    matchState.playerX.health    = MAX_HEALTH;
+    matchState.playerO.health    = MAX_HEALTH;
     matchState.countRoundsPlayed = 0;
+    matchState.matchResult       = ONGOING;
 
-    // kết quả match đang tiếp diễn
-    matchState.matchResult = ONGOING;
-
-    // khởi tạo round đầu tiên
     initRound(matchState.currentRound, matchState.countRoundsPlayed);
 }
 
-
-
-// initRound: khởi tạo một round mới
-// roundCount dùng để quyết định ai đi trước
-// vòng chẵn -> X đi trước
-// vòng lẻ -> O đi trước
 void initRound(RoundState& roundState, int roundCount)
 {
-    // reset số lượt
     roundState.turnCount = 0;
+    roundState.result    = ONGOING;
 
-    // round chưa có kết quả
-    roundState.result = ONGOING;
+    // Khởi tạo bàn cờ trống BOARD_SIZE x BOARD_SIZE
+    roundState.board.assign(BOARD_SIZE,
+                            vector<PlayerType>(BOARD_SIZE, NONE));
 
-    // xóa bàn cờ cũ nếu có
-    roundState.board.clear();
-
-    // tạo bàn cờ BOARD_SIZE x BOARD_SIZE
-    for (int i = 0; i < BOARD_SIZE; i++)
-    {
-        vector<PlayerType> row;
-
-        for (int j = 0; j < BOARD_SIZE; j++)
-        {
-            // ban đầu tất cả ô đều trống
-            row.push_back(NONE);
-        }
-
-        roundState.board.push_back(row);
-    }
-
-    // quyết định người đi trước
-    if (roundCount % 2 == 0)
-        roundState.toMove = X;
-    else
-        roundState.toMove = O;
+    // Vòng chẵn → X đi trước, vòng lẻ → O đi trước
+    roundState.toMove = (roundCount % 2 == 0) ? X : O;
 }
 
 
+// ============================================================
+// Logic trò chơi
+// ============================================================
 
-// ======================================================
-// Các hàm xử lý logic trò chơi
-// ======================================================
-
-
-// checkValidMove:
-// kiểm tra một nước đi có hợp lệ hay không
-// điều kiện:
-// 1. phải nằm trong bàn cờ
-// 2. ô đó chưa có quân
-// 3. round chưa kết thúc
 bool checkValidMove(const RoundState& roundState, int x, int y)
 {
-    // kiểm tra ngoài biên bàn cờ
-    if (x < 0 || y < 0 || x >= BOARD_SIZE || y >= BOARD_SIZE)
+    if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE)
         return false;
 
-    // ô đã có quân
     if (roundState.board[x][y] != NONE)
         return false;
 
-    // round đã kết thúc
     if (roundState.result != ONGOING)
         return false;
 
     return true;
 }
 
-
-
-// makeMove:
-// thực hiện một nước đi
-// - đặt quân lên bàn cờ
-// - tăng turnCount
-// - đổi lượt người chơi
 void makeMove(RoundState& roundState, int x, int y)
 {
-    // nếu nước đi không hợp lệ thì bỏ qua
-    if (checkValidMove(roundState, x, y) == false)
+    if (!checkValidMove(roundState, x, y))
         return;
 
-    // đặt quân của người chơi hiện tại
     roundState.board[x][y] = roundState.toMove;
-
-    // tăng số lượt
     roundState.turnCount++;
-
-    // đổi lượt người chơi
-    if (roundState.toMove == X)
-        roundState.toMove = O;
-    else
-        roundState.toMove = X;
+    roundState.toMove = (roundState.toMove == X) ? O : X;
 }
 
 
+// Đếm quân liên tiếp của `player` từ (x, y) theo hướng (dx, dy) và ngược lại
+static int countDir(const vector<vector<PlayerType>>& board,
+                    int x, int y,
+                    int dx, int dy,
+                    PlayerType player)
+{
+    int count = 0;
 
-// checkRoundResult:
-// kiểm tra sau mỗi nước đi xem round đã kết thúc chưa
-// điều kiện thắng: 5 quân liên tiếp
+    // Chiều thuận
+    for (int nx = x + dx, ny = y + dy;
+         nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE
+         && board[nx][ny] == player;
+         nx += dx, ny += dy)
+        count++;
+
+    // Chiều ngược
+    for (int nx = x - dx, ny = y - dy;
+         nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE
+         && board[nx][ny] == player;
+         nx -= dx, ny -= dy)
+        count++;
+
+    return count;
+}
+
 RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int lastMoveY)
 {
-    // xác định quân vừa đánh
     PlayerType player = roundState.board[lastMoveX][lastMoveY];
-
     if (player == NONE)
         return ONGOING;
 
-    int count;
-    int i;
+    // Bốn hướng: ngang, dọc, chéo \, chéo /
+    const int dirs[4][2] = { {1,0}, {0,1}, {1,1}, {1,-1} };
 
-
-    // =============================
-    // kiểm tra ngang
-    // =============================
-    count = 1;
-
-    for (i = lastMoveX + 1; i < BOARD_SIZE && roundState.board[i][lastMoveY] == player; i++)
-        count++;
-
-    for (i = lastMoveX - 1; i >= 0 && roundState.board[i][lastMoveY] == player; i--)
-        count++;
-
-    if (count >= 5)
+    for (auto& d : dirs)
     {
-        if (player == X) return X_WINS;
-        else return O_WINS;
+        // +1 cho ô vừa đặt
+        int total = 1 + countDir(roundState.board,
+                                  lastMoveX, lastMoveY,
+                                  d[0], d[1],
+                                  player);
+        if (total >= WIN_LENGTH)
+            return (player == X) ? X_WINS : O_WINS;
     }
 
-
-    // =============================
-    // kiểm tra dọc
-    // =============================
-    count = 1;
-
-    for (i = lastMoveY + 1; i < BOARD_SIZE && roundState.board[lastMoveX][i] == player; i++)
-        count++;
-
-    for (i = lastMoveY - 1; i >= 0 && roundState.board[lastMoveX][i] == player; i--)
-        count++;
-
-    if (count >= 5)
-    {
-        if (player == X) return X_WINS;
-        else return O_WINS;
-    }
-
-
-    // =============================
-    // kiem tra cheo (top-left to bottom-right)
-    // =============================
-    count = 1;
-
-    int x = lastMoveX + 1;
-    int y = lastMoveY + 1;
-
-    while (x < BOARD_SIZE && y < BOARD_SIZE && roundState.board[x][y] == player)
-    {
-        count++;
-        x++;
-        y++;
-    }
-
-    x = lastMoveX - 1;
-    y = lastMoveY - 1;
-
-    while (x >= 0 && y >= 0 && roundState.board[x][y] == player)
-    {
-        count++;
-        x--;
-        y--;
-    }
-
-    if (count >= 5)
-    {
-        if (player == X) return X_WINS;
-        else return O_WINS;
-    }
-
-
-    // =============================
-    // kiểm tra chéo /
-    // =============================
-    count = 1;
-
-    x = lastMoveX + 1;
-    y = lastMoveY - 1;
-
-    while (x < BOARD_SIZE && y >= 0 && roundState.board[x][y] == player)
-    {
-        count++;
-        x++;
-        y--;
-    }
-
-    x = lastMoveX - 1;
-    y = lastMoveY + 1;
-
-    while (x >= 0 && y < BOARD_SIZE && roundState.board[x][y] == player)
-    {
-        count++;
-        x--;
-        y++;
-    }
-
-    if (count >= 5)
-    {
-        if (player == X) return X_WINS;
-        else return O_WINS;
-    }
-
-
-    // nếu bàn cờ đầy mà chưa ai thắng
     if (roundState.turnCount == BOARD_SIZE * BOARD_SIZE)
         return DRAW;
 
     return ONGOING;
 }
 
-
-
-// executeAttack:
-// sau khi kết thúc một round thắng
-// người thắng sẽ gây damage lên đối thủ
-// damage phụ thuộc vào loại character
 void executeAttack(Player& attacker, Player& defender, int turnCount)
 {
-    int damage = 0;
-
+    int damage     = 0;
     int boardTotal = BOARD_SIZE * BOARD_SIZE;
 
-    int fifthBoard = boardTotal / 5;
-    int threeFifthBoard = (boardTotal * 3) / 5;
+    // Mốc early/mid/late game theo tỉ lệ số ô
+    int earlyEnd = boardTotal / 5;
+    int midEnd   = (boardTotal * 3) / 5;
 
-
-    // ==============================
-    // ASSASSIN
-    // ==============================
-    if (attacker.character == ASSASSIN)
+    switch (attacker.character)
     {
-        // late game -> kết liễu
-        if (turnCount > threeFifthBoard)
-        {
-            damage = defender.health;
-        }
-
-        // mid game -> damage 60-80
-        else if (turnCount > fifthBoard)
-        {
-            damage = 60 + (turnCount - fifthBoard) * 20 / (threeFifthBoard - fifthBoard);
-        }
-
-        // early game
+    case ASSASSIN:
+        if (turnCount > midEnd)
+            damage = defender.health;                          // Kết liễu (late game)
+        else if (turnCount > earlyEnd)
+            damage = ASSASSIN_MID_DAMAGE_BASE
+                   + (turnCount - earlyEnd)
+                   * ASSASSIN_MID_DAMAGE_BONUS
+                   / (midEnd - earlyEnd);                      // Scale tuyến tính (mid game)
         else
+            damage = ASSASSIN_EARLY_DAMAGE;                    // Cố định (early game)
+        break;
+
+    case BRUISER:
+        damage = BRUISER_DAMAGE;
+        break;
+
+    case VAMPIRE:
+        damage = VAMPIRE_DAMAGE;
         {
-            damage = 35;
+            int heal = VAMPIRE_HEAL_BASE + rand() % VAMPIRE_HEAL_RANDOM;
+            attacker.health = std::min(attacker.health + heal, MAX_HEALTH);
         }
+        break;
     }
 
-
-    // ==============================
-    // BRUISER
-    // ==============================
-    else if (attacker.character == BRUISER)
-    {
-        damage = 60;
-    }
-
-
-    // ==============================
-    // VAMPIRE
-    // ==============================
-    else if (attacker.character == VAMPIRE)
-    {
-        damage = 50;
-
-        int heal = 15 + rand() % 11;
-
-        attacker.health = attacker.health + heal;
-
-        if (attacker.health > MAX_HEALTH)
-            attacker.health = MAX_HEALTH;
-    }
-
-
-    // trừ máu defender
-    defender.health = defender.health - damage;
-
-    if (defender.health < 0)
-        defender.health = 0;
+    defender.health = std::max(defender.health - damage, 0);
 }
 
-
-
-// checkMatchResult:
-// kiểm tra xem trận đấu đã kết thúc chưa
-// nếu máu một bên = 0 thì bên kia thắng
-RoundResult checkMatchResult(const MatchState& matchState) {
-    if (matchState.playerX.health <= 0)
-        return O_WINS;
-
-    if (matchState.playerO.health <= 0)
-        return X_WINS;
-
+RoundResult checkMatchResult(const MatchState& matchState)
+{
+    if (matchState.playerX.health <= 0) return O_WINS;
+    if (matchState.playerO.health <= 0) return X_WINS;
     return ONGOING;
-
 }
+
+
+// ============================================================
+// Bảng độ phân giải
+// ============================================================
 
 const ResolutionOption RESOLUTIONS[] =
 {
-    {1280,  720,  "1280x720 (16:9)"},
-    {1366,  768,  "1366x768 (16:9)"},
-    {1600,  900,  "1600x900 (16:9)"},
+    {1280,  720,  "1280x720 (16:9)" },
+    {1366,  768,  "1366x768 (16:9)" },
+    {1600,  900,  "1600x900 (16:9)" },
     {1920, 1080,  "1920x1080 (16:9)"},
     {1920, 1200,  "1920x1200 (16:10)"},
-    {2560, 1440,  "2560x1440 (16:9)"},
+    {2560, 1440,  "2560x1440 (16:9)" },
     {2560, 1600,  "2560x1600 (16:10)"},
-    {2880, 1620,  "2880x1620 (16:9)"},
+    {2880, 1620,  "2880x1620 (16:9)" },
     {2880, 1800,  "2880x1800 (16:10)"},
-    {3840, 2160,  "3840x2160 (16:9)"}
+    {3840, 2160,  "3840x2160 (16:9)" },
 };
 
 const int RESOLUTION_COUNT = sizeof(RESOLUTIONS) / sizeof(RESOLUTIONS[0]);
