@@ -46,14 +46,19 @@ struct ParallaxLayer
 
 static ParallaxLayer forestLayers[FOREST_LAYER_COUNT];
 
-// Vẽ parallax background cho main menu, gọi mỗi frame
-void drawParallaxBackground(float speedMultiplier = 1.0f);
-
-static bool isResolutionAllowed(int width, int height)
-{
-    int monitor = GetCurrentMonitor();
-    return width <= GetMonitorWidth(monitor) && height <= GetMonitorHeight(monitor);
-}
+// Forward declarations — internal only
+static void drawParallaxBackground(float speedMultiplier = 1.0f);
+static void drawMenu(const UIState &ui);
+static void drawMenuButton(const UIState &ui);
+static void drawBoard(const MatchState &match, const UIState &ui);
+static void drawStatusPanel(const MatchState &match);
+static void drawTurnBanner(const MatchState &match);
+static void drawCharacters(float shiftX);
+static void drawPauseOverlay(const UIState &ui);
+static void drawPlayerPanel(const char* name, int health, Color accent,
+                            float x, float y, float barW, float barH,
+                            float nameFontSize, float hpFontSize);
+static void drawTurnIndicator(const MatchState &match, int screenW, int screenH);
 
 // --- HAM RENDER TONG ---
 void renderGame(const MatchState &match, const UIState &ui)
@@ -172,7 +177,7 @@ static BoardLayout getBoardLayout(int screenW, int screenH)
     return {boardPixelSize, cellSize, startX, startY};
 }
 
-void drawCharacters(float shiftX)
+static void drawCharacters(float shiftX)
 {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
@@ -196,7 +201,7 @@ void drawCharacters(float shiftX)
 }
 
 // --- PARALLAX BACKGROUND ---
-void drawParallaxBackground(float speedMultiplier)
+static void drawParallaxBackground(float speedMultiplier)
 {
     float dt = GetFrameTime();
     int screenW = GetScreenWidth();
@@ -234,7 +239,7 @@ void drawParallaxBackground(float speedMultiplier)
 }
 
 // --- CAC HAM LIEN QUAN DEN MAIN MENU ---
-void drawMenu(const UIState &ui)
+static void drawMenu(const UIState &ui)
 {
     drawParallaxBackground(1.0f);
 
@@ -255,7 +260,7 @@ void drawMenu(const UIState &ui)
     drawMenuButton(ui);
 }
 
-void drawMenuButton(const UIState &ui)
+static void drawMenuButton(const UIState &ui)
 {
 
     vector<string> options = {"New Game", "Load Game", "Settings", "Exit"};
@@ -483,73 +488,68 @@ void drawGameIntro(const MatchState &match, const UIState &ui)
 }
 
 // Nhom ban co
-void drawCaroGame(const MatchState &match, const UIState &ui)
+static void drawPauseOverlay(const UIState &ui)
 {
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
 
-    drawParallaxBackground(0.0f); // Lock background
-    drawCharacters(0.0f);         // Ve character o trang thai Dung im
+    DrawRectangle(0, 0, screenW, screenH, Fade(BLACK, 0.7f));
 
-    // Vẽ hai bên trước, vẽ bàn cờ ở giữa sau
-    drawStatusPanel(match);
-    drawBoard(match, ui);
+    float panelW = screenW * 0.32f;
+    float panelH = screenH * 0.34f;
+    float panelX = screenW / 2.0f - panelW / 2.0f;
+    float panelY = screenH / 2.0f - panelH / 2.0f;
 
-    // Hien thi Pause Menu de len khung game
-    if (ui.isPaused)
+    DrawRectangle((int)panelX, (int)panelY, (int)panelW, (int)panelH, buttonDarkPurple);
+    DrawRectangleLinesEx({panelX, panelY, panelW, panelH}, 4, buttonYellow);
+
+    const char *title = "PAUSED";
+    float titleSize = screenH * 0.06f;
+    Vector2 titleMeasure = MeasureTextEx(font8bit, title, titleSize, 2.0f);
+    DrawTextEx(font8bit, title,
+               {screenW / 2.0f - titleMeasure.x / 2.0f, panelY + panelH * 0.10f},
+               titleSize, 2.0f, WHITE);
+
+    const char *options[] = {"Save Game", "Exit to Menu"};
+    const int optionCount = 2;
+
+    float optionW = panelW * 0.70f;
+    float optionH = panelH * 0.18f;
+    float gap = panelH * 0.10f;
+    float startY = panelY + panelH * 0.36f;
+    float optionFontSize = optionH * 0.42f;
+
+    for (int i = 0; i < optionCount; ++i)
     {
-        int screenW = GetScreenWidth();
-        int screenH = GetScreenHeight();
+        bool isSelected = (i == ui.pauseMenuIndex);
 
-        DrawRectangle(0, 0, screenW, screenH, Fade(BLACK, 0.7f));
+        Color bgColor = isSelected ? buttonYellow : Fade(BLACK, 0.35f);
+        Color borderColor = isSelected ? BLACK : buttonYellow;
+        Color textColor = isSelected ? buttonDarkPurple : buttonYellow;
 
-        float panelW = screenW * 0.32f;
-        float panelH = screenH * 0.34f;
-        float panelX = screenW / 2.0f - panelW / 2.0f;
-        float panelY = screenH / 2.0f - panelH / 2.0f;
+        float optX = screenW / 2.0f - optionW / 2.0f;
+        float optY = startY + i * (optionH + gap);
 
-        DrawRectangle((int)panelX, (int)panelY, (int)panelW, (int)panelH, buttonDarkPurple);
-        DrawRectangleLinesEx({panelX, panelY, panelW, panelH}, 4, buttonYellow);
+        DrawRectangle((int)optX, (int)optY, (int)optionW, (int)optionH, bgColor);
+        DrawRectangleLinesEx({optX, optY, optionW, optionH}, 3, borderColor);
 
-        const char *title = "PAUSED";
-        float titleSize = screenH * 0.06f;
-        Vector2 titleMeasure = MeasureTextEx(font8bit, title, titleSize, 2.0f);
-        DrawTextEx(font8bit,
-                   title,
-                   {screenW / 2.0f - titleMeasure.x / 2.0f, panelY + panelH * 0.10f},
-                   titleSize, 2.0f, WHITE);
-
-        const char *options[] = {"Save Game", "Exit to Menu"};
-        const int optionCount = 2;
-
-        float optionW = panelW * 0.70f;
-        float optionH = panelH * 0.18f;
-        float gap = panelH * 0.10f;
-        float startY = panelY + panelH * 0.36f;
-        float optionFontSize = optionH * 0.42f;
-
-        for (int i = 0; i < optionCount; ++i)
-        {
-            bool isSelected = (i == ui.pauseMenuIndex);
-
-            Color bgColor = isSelected ? buttonYellow : Fade(BLACK, 0.35f);
-            Color borderColor = isSelected ? BLACK : buttonYellow;
-            Color textColor = isSelected ? buttonDarkPurple : buttonYellow;
-
-            float optX = screenW / 2.0f - optionW / 2.0f;
-            float optY = startY + i * (optionH + gap);
-
-            DrawRectangle((int)optX, (int)optY, (int)optionW, (int)optionH, bgColor);
-            DrawRectangleLinesEx({optX, optY, optionW, optionH}, 3, borderColor);
-
-            Vector2 optSize = MeasureTextEx(font8bit, options[i], optionFontSize, 2.0f);
-            DrawTextEx(font8bit,
-                       options[i],
-                       {optX + (optionW - optSize.x) / 2.0f, optY + (optionH - optSize.y) / 2.0f},
-                       optionFontSize, 2.0f, textColor);
-        }
+        Vector2 optSize = MeasureTextEx(font8bit, options[i], optionFontSize, 2.0f);
+        DrawTextEx(font8bit, options[i],
+                   {optX + (optionW - optSize.x) / 2.0f, optY + (optionH - optSize.y) / 2.0f},
+                   optionFontSize, 2.0f, textColor);
     }
 }
 
-void drawBoard(const MatchState &match, const UIState &ui)
+void drawCaroGame(const MatchState &match, const UIState &ui)
+{
+    drawParallaxBackground(0.0f);
+    drawCharacters(0.0f);
+    drawStatusPanel(match);
+    drawBoard(match, ui);
+    if (ui.isPaused) drawPauseOverlay(ui);
+}
+
+static void drawBoard(const MatchState &match, const UIState &ui)
 {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
@@ -594,7 +594,7 @@ void drawBoard(const MatchState &match, const UIState &ui)
         }
     }
 }
-void drawTurnBanner(const MatchState &match)
+static void drawTurnBanner(const MatchState &match)
 {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
@@ -624,65 +624,32 @@ void drawTurnBanner(const MatchState &match)
                {turnBoxX + paddingX, turnBoxY + paddingY},
                fontSize, 0, RAYWHITE);
 }
-void drawStatusPanel(const MatchState &match)
+static void drawPlayerPanel(const char* name, int health, Color accent,
+                            float x, float y, float barW, float barH,
+                            float nameFontSize, float hpFontSize)
 {
-    int screenW = GetScreenWidth();
-    int screenH = GetScreenHeight();
-
-    float nameFontSize = screenH * 0.08f;
-    float hpFontSize = screenH * 0.035f;
-    float turnFontSize = screenH * 0.04f;
-
-    float hpBarWidth = screenW * 0.20f;
-    float hpBarHeight = screenH * 0.045f;
-
-    Color panelBg = Fade(BLACK, 0.50f);
-    Color hpBg = Fade(RAYWHITE, 0.16f);
+    Color hpBg     = Fade(RAYWHITE, 0.16f);
     Color hpBorder = Fade(WHITE, 0.90f);
-    Color infoColor = RAYWHITE;
 
-    float leftX = screenW * 0.05f;
-    float leftY = screenH * 0.16f;
+    DrawRectangle((int)(x - 20), (int)(y - 20), (int)(barW + 40), 150, Fade(BLACK, 0.50f));
+    DrawTextEx(font8bit, name, {x, y}, nameFontSize, 0, accent);
 
-    float rightX = screenW * 0.95f - hpBarWidth;
-    float rightY = screenH * 0.16f;
+    float hpFill = barW * ((float)health / MAX_HEALTH);
+    float barY   = y + nameFontSize + 12;
+    DrawRectangle((int)x, (int)barY, (int)barW,   (int)barH, hpBg);
+    DrawRectangle((int)x, (int)barY, (int)hpFill, (int)barH, accent);
+    DrawRectangleLinesEx({x, barY, barW, barH}, 3, hpBorder);
 
-    DrawRectangle((int)(leftX - 20), (int)(leftY - 20), (int)(hpBarWidth + 40), 150, panelBg);
-    DrawRectangle((int)(rightX - 20), (int)(rightY - 20), (int)(hpBarWidth + 40), 150, panelBg);
-
-    DrawTextEx(font8bit, "Player X", {leftX, leftY}, nameFontSize, 0, RED);
-    float hpFillX = hpBarWidth * ((float)match.playerX.health / MAX_HEALTH);
-    DrawRectangle((int)leftX, (int)(leftY + nameFontSize + 12), (int)hpBarWidth, (int)hpBarHeight, hpBg);
-    DrawRectangle((int)leftX, (int)(leftY + nameFontSize + 12), (int)hpFillX, (int)hpBarHeight, RED);
-    DrawRectangleLinesEx({leftX, leftY + nameFontSize + 12, hpBarWidth, hpBarHeight}, 3, hpBorder);
     DrawTextEx(font8bit,
-               TextFormat("HP: %d/%d", match.playerX.health, MAX_HEALTH),
-               {leftX, leftY + nameFontSize + hpBarHeight + 24},
-               hpFontSize, 0, infoColor);
+               TextFormat("HP: %d/%d", health, MAX_HEALTH),
+               {x, barY + barH + 12}, hpFontSize, 0, RAYWHITE);
+}
 
-    DrawTextEx(font8bit, "Player O", {rightX, rightY}, nameFontSize, 0, BLUE);
-    float hpFillO = hpBarWidth * ((float)match.playerO.health / MAX_HEALTH);
-    DrawRectangle((int)rightX, (int)(rightY + nameFontSize + 12), (int)hpBarWidth, (int)hpBarHeight, hpBg);
-    DrawRectangle((int)rightX, (int)(rightY + nameFontSize + 12), (int)hpFillO, (int)hpBarHeight, BLUE);
-    DrawRectangleLinesEx({rightX, rightY + nameFontSize + 12, hpBarWidth, hpBarHeight}, 3, hpBorder);
-    DrawTextEx(font8bit,
-               TextFormat("HP: %d/%d", match.playerO.health, MAX_HEALTH),
-               {rightX, rightY + nameFontSize + hpBarHeight + 24},
-               hpFontSize, 0, infoColor);
-
-    const char *turnText;
-    Color turnColor;
-
-    if (match.currentRound.toMove == X)
-    {
-        turnText = "TURN: PLAYER X";
-        turnColor = RED;
-    }
-    else
-    {
-        turnText = "TURN: PLAYER O";
-        turnColor = BLUE;
-    }
+static void drawTurnIndicator(const MatchState &match, int screenW, int screenH)
+{
+    float turnFontSize = screenH * 0.04f;
+    const char *turnText = (match.currentRound.toMove == X) ? "TURN: PLAYER X" : "TURN: PLAYER O";
+    Color turnColor      = (match.currentRound.toMove == X) ? RED : BLUE;
 
     Vector2 turnSize = MeasureTextEx(font8bit, turnText, turnFontSize, 0);
     float turnBoxW = turnSize.x + 60.0f;
@@ -692,10 +659,27 @@ void drawStatusPanel(const MatchState &match)
 
     DrawRectangle((int)turnBoxX, (int)turnBoxY, (int)turnBoxW, (int)turnBoxH, Fade(BLACK, 0.60f));
     DrawRectangleLinesEx({turnBoxX, turnBoxY, turnBoxW, turnBoxH}, 3, turnColor);
-    DrawTextEx(font8bit,
-               turnText,
+    DrawTextEx(font8bit, turnText,
                {turnBoxX + 30.0f, turnBoxY + 12.0f},
                turnFontSize, 0, RAYWHITE);
+}
+
+static void drawStatusPanel(const MatchState &match)
+{
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    float nameFontSize = screenH * 0.08f;
+    float hpFontSize   = screenH * 0.035f;
+    float barW         = screenW * 0.20f;
+    float barH         = screenH * 0.045f;
+
+    drawPlayerPanel("Player X", match.playerX.health, RED,
+                    screenW * 0.05f, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
+    drawPlayerPanel("Player O", match.playerO.health, BLUE,
+                    screenW * 0.95f - barW, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
+
+    drawTurnIndicator(match, screenW, screenH);
 }
 // nhom game over: Lam tam
 void drawGameOver(const MatchState &match, const UIState &ui)

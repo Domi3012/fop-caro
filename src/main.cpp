@@ -6,37 +6,35 @@
 
 int main()
 {
-    // 1. Báo cho Raylib biết mình muốn chạy Fullscreen
+    // --- Init ---
     SetConfigFlags(FLAG_FULLSCREEN_MODE);
-    
-    // 2. Truyền 0, 0 để tự động fit với độ phân giải màn hình hiện tại
-    InitWindow(0, 0, "RGBCaro - The RPG Caro Game");
-    initAudio(); // thêm khởi tạo hệ thống âm thanh
+    InitWindow(0, 0, "RGBCaro - The RPG Caro Game");  // 0,0 = auto-fit monitor
+    initAudio();
     initView();
     SetTargetFPS(60);
-    
+
     MatchState match;
     UIState ui;
     ui.currentScreen = MAIN_MENU;
     ui.mainMenuIndex = 0;
-    playMusic(BGM_MENU); // thêm nhạc nền menu khi vào game
+    playMusic(BGM_MENU);
     initRound(match.currentRound, 0);
 
-    SetExitKey(0); // Vô hiệu hóa phím ESC để thoát toan bộ, chỉ cho phép thoát qua menu hoặc nút tắt cửa sổ
+    SetExitKey(0);  // Disable ESC auto-quit; only allow exit via menu/window close
+
+    // --- Game Loop ---
     while (!ui.shouldExit && !WindowShouldClose())
     {
         handleInput(match, ui);
-        updateAudioStream(); // thêm cập nhật music stream mỗi frame
-
+        updateAudioStream();
         BeginDrawing();
-
         renderGame(match, ui);
-
         EndDrawing();
     }
 
+    // --- Cleanup ---
     unloadView();
-    unloadAudio(); // thêm giải phóng tài nguyên âm thanh
+    unloadAudio();
     CloseWindow();
     return 0;
 }
