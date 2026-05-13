@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <cctype>
 #include "audio_manager.h"
 
 using std::string;
@@ -55,7 +56,7 @@ static void drawStatusPanel(const MatchState &match);
 static void drawTurnBanner(const MatchState &match);
 static void drawCharacters(float shiftX);
 static void drawPauseOverlay(const UIState &ui);
-static void drawPlayerPanel(const char* name, int health, Color accent,
+static void drawPlayerPanel(const char *name, int health, Color accent,
                             float x, float y, float barW, float barH,
                             float nameFontSize, float hpFontSize);
 static void drawTurnIndicator(const MatchState &match, int screenW, int screenH);
@@ -80,6 +81,10 @@ void renderGame(const MatchState &match, const UIState &ui)
 
     case LOAD_GAME:
         drawLoadGameScreen(ui, getSaveFilesList());
+        break;
+
+    case SAVE_GAME:
+        drawSaveGameScreen(ui);
         break;
 
     case SETTINGS:
@@ -546,7 +551,8 @@ void drawCaroGame(const MatchState &match, const UIState &ui)
     drawCharacters(0.0f);
     drawStatusPanel(match);
     drawBoard(match, ui);
-    if (ui.isPaused) drawPauseOverlay(ui);
+    if (ui.isPaused)
+        drawPauseOverlay(ui);
 }
 
 static void drawBoard(const MatchState &match, const UIState &ui)
@@ -624,19 +630,19 @@ static void drawTurnBanner(const MatchState &match)
                {turnBoxX + paddingX, turnBoxY + paddingY},
                fontSize, 0, RAYWHITE);
 }
-static void drawPlayerPanel(const char* name, int health, Color accent,
+static void drawPlayerPanel(const char *name, int health, Color accent,
                             float x, float y, float barW, float barH,
                             float nameFontSize, float hpFontSize)
 {
-    Color hpBg     = Fade(RAYWHITE, 0.16f);
+    Color hpBg = Fade(RAYWHITE, 0.16f);
     Color hpBorder = Fade(WHITE, 0.90f);
 
     DrawRectangle((int)(x - 20), (int)(y - 20), (int)(barW + 40), 150, Fade(BLACK, 0.50f));
     DrawTextEx(font8bit, name, {x, y}, nameFontSize, 0, accent);
 
     float hpFill = barW * ((float)health / MAX_HEALTH);
-    float barY   = y + nameFontSize + 12;
-    DrawRectangle((int)x, (int)barY, (int)barW,   (int)barH, hpBg);
+    float barY = y + nameFontSize + 12;
+    DrawRectangle((int)x, (int)barY, (int)barW, (int)barH, hpBg);
     DrawRectangle((int)x, (int)barY, (int)hpFill, (int)barH, accent);
     DrawRectangleLinesEx({x, barY, barW, barH}, 3, hpBorder);
 
@@ -649,7 +655,7 @@ static void drawTurnIndicator(const MatchState &match, int screenW, int screenH)
 {
     float turnFontSize = screenH * 0.04f;
     const char *turnText = (match.currentRound.toMove == X) ? "TURN: PLAYER X" : "TURN: PLAYER O";
-    Color turnColor      = (match.currentRound.toMove == X) ? RED : BLUE;
+    Color turnColor = (match.currentRound.toMove == X) ? RED : BLUE;
 
     Vector2 turnSize = MeasureTextEx(font8bit, turnText, turnFontSize, 0);
     float turnBoxW = turnSize.x + 60.0f;
@@ -670,9 +676,9 @@ static void drawStatusPanel(const MatchState &match)
     int screenH = GetScreenHeight();
 
     float nameFontSize = screenH * 0.08f;
-    float hpFontSize   = screenH * 0.035f;
-    float barW         = screenW * 0.20f;
-    float barH         = screenH * 0.045f;
+    float hpFontSize = screenH * 0.035f;
+    float barW = screenW * 0.20f;
+    float barH = screenH * 0.045f;
 
     drawPlayerPanel("Player X", match.playerX.health, RED,
                     screenW * 0.05f, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
@@ -799,16 +805,161 @@ void drawLoadGameScreen(const UIState &ui, const std::vector<std::string> &saveF
         DrawRectangle((int)rowX, (int)rowY, (int)rowWidth, (int)rowHeight, bgColor);
         DrawRectangleLinesEx({rowX, rowY, rowWidth, rowHeight}, 2, borderColor);
 
-        std::string displayName = formatSaveDisplayName(saveFiles[i]);
+        // Parse tên file để lấy tên đặt và ngày giờ
+        std::string displayName;
+        std::string dateTimeInfo;
+        parseSaveFileName(saveFiles[i], displayName, dateTimeInfo);
 
-        Vector2 textSize = MeasureTextEx(font8bit, displayName.c_str(), rowFontSize, spacing);
-        float textX = rowX + (rowWidth - textSize.x) / 2.0f;
-        float textY = rowY + (rowHeight - textSize.y) / 2.0f;
+        // Vẽ tên đặt (chính)
+        float nameFontSize = rowFontSize;
+        Vector2 nameSize = MeasureTextEx(font8bit, displayName.c_str(), nameFontSize, spacing);
+        float nameX = rowX + rowWidth * 0.04f;
+        float nameY = rowY + (rowHeight - nameSize.y) / 2.0f;
+        DrawTextEx(font8bit, displayName.c_str(), {nameX, nameY}, nameFontSize, spacing, textColor);
 
-        DrawTextEx(font8bit, displayName.c_str(),
-                   {textX, textY},
-                   rowFontSize, spacing, textColor);
+        // Vẽ ngày giờ (nhỏ, bên phải)
+        if (!dateTimeInfo.empty())
+        {
+            float dtFontSize = rowFontSize * 0.55f;
+            Vector2 dtSize = MeasureTextEx(font8bit, dateTimeInfo.c_str(), dtFontSize, spacing);
+            float dtX = rowX + rowWidth - dtSize.x - rowWidth * 0.04f;
+            float dtY = rowY + (rowHeight - dtSize.y) / 2.0f;
+            Color dtColor = isSelected ? Fade(buttonDarkPurple, 0.7f) : Fade(RAYWHITE, 0.55f);
+            DrawTextEx(font8bit, dateTimeInfo.c_str(), {dtX, dtY}, dtFontSize, spacing, dtColor);
+        }
     }
+
+    // Footer hint
+    const char *footer = "ENTER: Load  |  DEL/BKSP: Delete  |  ESC: Back";
+    float footerSize = screenH * 0.022f;
+    Vector2 footerMeasure = MeasureTextEx(font8bit, footer, footerSize, 1.0f);
+    DrawTextEx(font8bit, footer,
+               {screenW / 2.0f - footerMeasure.x / 2.0f, screenH * 0.92f},
+               footerSize, 1.0f, Fade(WHITE, 0.45f));
+
+    // --- Popup xác nhận xoá ---
+    if (ui.showDeleteConfirm)
+    {
+        // Overlay mờ toàn màn hình
+        DrawRectangle(0, 0, screenW, screenH, Fade(BLACK, 0.65f));
+
+        // Panel xác nhận
+        float popupW = screenW * 0.40f;
+        float popupH = screenH * 0.22f;
+        float popupX = (screenW - popupW) / 2.0f;
+        float popupY = (screenH - popupH) / 2.0f;
+
+        DrawRectangle((int)popupX, (int)popupY, (int)popupW, (int)popupH, buttonDarkPurple);
+        DrawRectangleLinesEx({popupX, popupY, popupW, popupH}, 4, RED);
+
+        // Tên file sẽ bị xoá
+        std::string displayName, dateTimeInfo;
+        parseSaveFileName(saveFiles[ui.loadMenuIndex], displayName, dateTimeInfo);
+
+        const char *warnText = "Delete this save?";
+        float warnSize = screenH * 0.04f;
+        Vector2 warnMeasure = MeasureTextEx(font8bit, warnText, warnSize, 2.0f);
+        DrawTextEx(font8bit, warnText,
+                   {screenW / 2.0f - warnMeasure.x / 2.0f, popupY + popupH * 0.12f},
+                   warnSize, 2.0f, RED);
+
+        // Hiển thị tên file
+        std::string fileDisplay = "\"" + displayName + "\"";
+        if (!dateTimeInfo.empty())
+            fileDisplay += "  (" + dateTimeInfo + ")";
+        float fileSize = screenH * 0.028f;
+        Vector2 fileMeasure = MeasureTextEx(font8bit, fileDisplay.c_str(), fileSize, 1.0f);
+        DrawTextEx(font8bit, fileDisplay.c_str(),
+                   {screenW / 2.0f - fileMeasure.x / 2.0f, popupY + popupH * 0.40f},
+                   fileSize, 1.0f, buttonYellow);
+
+        // Dòng hướng dẫn
+        const char *confirmHint = "ENTER: Confirm Delete  |  ESC/BKSP/DEL: Cancel";
+        float hintSize = screenH * 0.022f;
+        Vector2 hintMeasure = MeasureTextEx(font8bit, confirmHint, hintSize, 1.0f);
+        DrawTextEx(font8bit, confirmHint,
+                   {screenW / 2.0f - hintMeasure.x / 2.0f, popupY + popupH * 0.68f},
+                   hintSize, 1.0f, Fade(WHITE, 0.6f));
+    }
+}
+
+void drawSaveGameScreen(const UIState &ui)
+{
+    drawParallaxBackground(1.0f);
+
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    // Panel chính
+    float panelW = screenW * 0.55f;
+    float panelH = screenH * 0.45f;
+    float panelX = (screenW - panelW) / 2.0f;
+    float panelY = (screenH - panelH) / 2.0f;
+
+    DrawRectangle(panelX, panelY, panelW, panelH, Fade(BLACK, 0.75f));
+    DrawRectangleLinesEx({panelX, panelY, panelW, panelH}, 4, buttonYellow);
+
+    // Tiêu đề
+    const char *title = "SAVE GAME";
+    float titleSize = screenH * 0.07f;
+    Vector2 titleMeasure = MeasureTextEx(font8bit, title, titleSize, 2.0f);
+    DrawTextEx(font8bit, title,
+               {screenW / 2.0f - titleMeasure.x / 2.0f, panelY + panelH * 0.06f},
+               titleSize, 2.0f, buttonYellow);
+
+    // Hướng dẫn
+    const char *hint = "Enter a name for your save (letters & numbers only):";
+    float hintSize = screenH * 0.028f;
+    Vector2 hintMeasure = MeasureTextEx(font8bit, hint, hintSize, 1.0f);
+    DrawTextEx(font8bit, hint,
+               {screenW / 2.0f - hintMeasure.x / 2.0f, panelY + panelH * 0.22f},
+               hintSize, 1.0f, Fade(WHITE, 0.8f));
+
+    // Ô nhập tên
+    float inputBoxW = panelW * 0.75f;
+    float inputBoxH = screenH * 0.06f;
+    float inputBoxX = screenW / 2.0f - inputBoxW / 2.0f;
+    float inputBoxY = panelY + panelH * 0.38f;
+
+    Color inputBg = Fade(WHITE, 0.1f);
+    Color inputBorder = ui.saveNameError ? RED : buttonYellow;
+    DrawRectangle((int)inputBoxX, (int)inputBoxY, (int)inputBoxW, (int)inputBoxH, inputBg);
+    DrawRectangleLinesEx({inputBoxX, inputBoxY, inputBoxW, inputBoxH}, 3, inputBorder);
+
+    // Hiển thị tên đang nhập + con trỏ nhấp nháy
+    float inputFontSize = inputBoxH * 0.55f;
+    std::string displayText = ui.saveNameInput;
+    // Con trỏ nhấp nháy
+    if (((int)(GetTime() * 2.0f) % 2 == 0) && displayText.size() < 20)
+        displayText += "_";
+
+    Vector2 inputMeasure = MeasureTextEx(font8bit, displayText.c_str(), inputFontSize, 1.0f);
+    DrawTextEx(font8bit, displayText.c_str(),
+               {inputBoxX + 16.0f, inputBoxY + (inputBoxH - inputMeasure.y) / 2.0f},
+               inputFontSize, 1.0f, RAYWHITE);
+
+    // Thông báo lỗi
+    if (ui.saveNameError)
+    {
+        const char *errMsg;
+        if (ui.saveNameInput.empty())
+            errMsg = "Name cannot be empty!";
+        else
+            errMsg = "Only letters (A-Z, a-z) and numbers (0-9) are allowed!";
+        float errSize = screenH * 0.024f;
+        Vector2 errMeasure = MeasureTextEx(font8bit, errMsg, errSize, 1.0f);
+        DrawTextEx(font8bit, errMsg,
+                   {screenW / 2.0f - errMeasure.x / 2.0f, inputBoxY + inputBoxH + 12.0f},
+                   errSize, 1.0f, RED);
+    }
+
+    // Footer
+    const char *footer = "ENTER: Save  |  ESC: Cancel";
+    float footerSize = screenH * 0.025f;
+    Vector2 footerMeasure = MeasureTextEx(font8bit, footer, footerSize, 1.0f);
+    DrawTextEx(font8bit, footer,
+               {screenW / 2.0f - footerMeasure.x / 2.0f, panelY + panelH - footerMeasure.y - 20.0f},
+               footerSize, 1.0f, Fade(WHITE, 0.5f));
 }
 
 void drawSettingsScreen(const UIState &ui)
@@ -885,11 +1036,60 @@ void drawSettingsScreen(const UIState &ui)
     }
 }
 
-std::string formatSaveDisplayName(const std::string &fileName)
+void parseSaveFileName(const std::string &fileName, std::string &displayName, std::string &dateTimeInfo)
 {
+    displayName.clear();
+    dateTimeInfo.clear();
+
+    // Kiểm tra đuôi .txt
+    if (fileName.size() < 5 || fileName.substr(fileName.size() - 4) != ".txt")
+    {
+        displayName = fileName;
+        return;
+    }
+
+    // Bỏ đuôi .txt
+    std::string stem = fileName.substr(0, fileName.size() - 4);
+
+    // Định dạng mới: <tên>_<YYYYMMDD_HHMMSS>
+    // Tìm dấu _ cuối cùng ngăn cách timestamp (định dạng YYYYMMDD_HHMMSS = 15 kí tự)
+    // Timestamp pattern: 8 chữ số + _ + 6 chữ số = 15 kí tự
+    if (stem.size() > 16)
+    {
+        // Lấy 15 kí tự cuối, kiểm tra có khớp pattern YYYYMMDD_HHMMSS không
+        std::string suffix = stem.substr(stem.size() - 15);
+        bool match = (suffix.size() == 15 &&
+                      std::isdigit(suffix[0]) && std::isdigit(suffix[1]) &&
+                      std::isdigit(suffix[2]) && std::isdigit(suffix[3]) &&
+                      std::isdigit(suffix[4]) && std::isdigit(suffix[5]) &&
+                      std::isdigit(suffix[6]) && std::isdigit(suffix[7]) &&
+                      suffix[8] == '_' &&
+                      std::isdigit(suffix[9]) && std::isdigit(suffix[10]) &&
+                      std::isdigit(suffix[11]) && std::isdigit(suffix[12]) &&
+                      std::isdigit(suffix[13]) && std::isdigit(suffix[14]));
+
+        if (match)
+        {
+            // Tên đặt = phần trước timestamp (bỏ dấu _)
+            displayName = stem.substr(0, stem.size() - 16); // bỏ _<timestamp>
+
+            // Parse ngày giờ
+            std::string year = suffix.substr(0, 4);
+            std::string month = suffix.substr(4, 2);
+            std::string day = suffix.substr(6, 2);
+            std::string hour = suffix.substr(9, 2);
+            std::string minute = suffix.substr(11, 2);
+            std::string second = suffix.substr(13, 2);
+
+            dateTimeInfo = day + "/" + month + "/" + year + " " +
+                           hour + ":" + minute + ":" + second;
+            return;
+        }
+    }
+
+    // Fallback: thử định dạng cũ "save_YYYYMMDD_HHMMSS.txt" (24 kí tự)
     if (fileName.size() == 24 &&
-        fileName.rfind("save_", 0) == 0 &&
-        fileName.substr(fileName.size() - 4) == ".txt")
+        fileName.rfind("save_", 0) == 0)
     {
         std::string year = fileName.substr(5, 4);
         std::string month = fileName.substr(9, 2);
@@ -898,9 +1098,12 @@ std::string formatSaveDisplayName(const std::string &fileName)
         std::string minute = fileName.substr(16, 2);
         std::string second = fileName.substr(18, 2);
 
-        return day + "/" + month + "/" + year + "  -  " +
-               hour + ":" + minute + ":" + second;
+        displayName = "AutoSave";
+        dateTimeInfo = day + "/" + month + "/" + year + " " +
+                       hour + ":" + minute + ":" + second;
+        return;
     }
 
-    return fileName;
+    // Không parse được
+    displayName = fileName;
 }
