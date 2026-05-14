@@ -159,10 +159,67 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
         round.result = rr;
         match.countRoundsPlayed++;
 
-        // Người thắng tấn công, người thua nhận sát thương
+        // Ghi nhận HP trước khi attack để tính damage/heal
         Player &attacker = (rr == X_WINS) ? match.playerX : match.playerO;
         Player &defender = (rr == X_WINS) ? match.playerO : match.playerX;
+        int defenderHpBefore = defender.health;
+        int attackerHpBefore = attacker.health;
+
         executeAttack(attacker, defender, round.turnCount);
+
+        // --- Spawn floating damage/heal text ---
+        int screenW = GetScreenWidth();
+        int screenH = GetScreenHeight();
+        int damageDealt = defenderHpBefore - defender.health;
+        int healAmount = attacker.health - attackerHpBefore;
+
+        // Damage text (đỏ) — hiện trên panel bên bị đánh
+        if (damageDealt > 0)
+        {
+            float dmgX, dmgY;
+            if (rr == X_WINS) // defender = O → panel bên phải
+            {
+                dmgX = screenW * 0.85f;
+                dmgY = screenH * 0.14f;
+            }
+            else // defender = X → panel bên trái
+            {
+                dmgX = screenW * 0.15f;
+                dmgY = screenH * 0.14f;
+            }
+            UIState::FloatingText ft;
+            ft.text = "-" + std::to_string(damageDealt);
+            ft.color = RED;
+            ft.x = dmgX;
+            ft.y = dmgY;
+            ft.timer = 1.8f;
+            ft.maxTimer = 1.8f;
+            ui.floatingTexts.push_back(ft);
+        }
+
+        // Heal text (xanh lá) — hiện trên panel bên attacker (Vampire)
+        if (healAmount > 0)
+        {
+            float healX, healY;
+            if (rr == X_WINS) // attacker = X → panel bên trái
+            {
+                healX = screenW * 0.15f;
+                healY = screenH * 0.14f;
+            }
+            else // attacker = O → panel bên phải
+            {
+                healX = screenW * 0.85f;
+                healY = screenH * 0.14f;
+            }
+            UIState::FloatingText ft;
+            ft.text = "+" + std::to_string(healAmount);
+            ft.color = GREEN;
+            ft.x = healX;
+            ft.y = healY;
+            ft.timer = 1.8f;
+            ft.maxTimer = 1.8f;
+            ui.floatingTexts.push_back(ft);
+        }
 
         // Kiểm tra xem trận đấu tổng đã có người thắng chưa
         RoundResult mr = checkMatchResult(match);
@@ -304,6 +361,9 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
 
             initMatch(match, playerX, playerO);
             ui.moveHistory.clear(); // Xoá lịch sử cho game mới
+            ui.displayHealthX = (float)MAX_HEALTH;
+            ui.displayHealthO = (float)MAX_HEALTH;
+            ui.floatingTexts.clear();
             startGameIntro(ui);
         }
     }
@@ -718,6 +778,9 @@ void handleLoadGameInput(MatchState &match, UIState &ui, std::vector<std::string
         ui.moveHistory.clear();
         if (loadGame(match, ui.moveHistory, saveFiles[ui.loadMenuIndex]))
         {
+            ui.displayHealthX = (float)match.playerX.health;
+            ui.displayHealthO = (float)match.playerO.health;
+            ui.floatingTexts.clear();
             startGameIntro(ui);
         }
     }

@@ -2,6 +2,7 @@
 
 #include "model.h"
 #include "raylib.h"
+#include <string>
 #include "bot_ai.h"
 
 enum GameScreen
@@ -64,6 +65,20 @@ struct UIState
     int resolutionIndex = 4;   // Index trong mảng RESOLUTIONS[] (mặc định 1920×1080)
     int renderWidth = 1920;    // Chiều rộng render hiện tại (px)
     int renderHeight = 1080;   // Chiều cao render hiện tại (px)
+
+    // --- Hiệu ứng HP mượt ---
+    float displayHealthX = (float)MAX_HEALTH; // HP hiển thị (nội suy mượt) của X
+    float displayHealthO = (float)MAX_HEALTH; // HP hiển thị (nội suy mượt) của O
+
+    // --- Floating damage/heal text ---
+    struct FloatingText {
+        std::string text;
+        Color color;
+        float x, y;        // vị trí hiển thị (screen coords)
+        float timer;        // thời gian còn lại
+        float maxTimer;     // thời gian tổng
+    };
+    std::vector<FloatingText> floatingTexts;
 };
 
 // Luồng điều phối chính

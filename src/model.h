@@ -103,6 +103,6 @@ void initRound(RoundState &roundState, int roundCount);
 
 bool checkValidMove(const RoundState &roundState, int x, int y);
 void makeMove(RoundState &roundState, int x, int y);
-RoundResult checkRoundResult(const RoundState &roundState, int lastMoveX, int lastMoveY);
+RoundResult checkRoundResult(RoundState &roundState, int lastMoveX, int lastMoveY);
 void executeAttack(Player &attacker, Player &defender, int turnCount);
 RoundResult checkMatchResult(const MatchState &matchState);
