@@ -40,6 +40,7 @@ void initRound(RoundState& roundState, int roundCount)
 {
     roundState.turnCount = 0;
     roundState.result    = ONGOING;
+    roundState.winningCells.clear();
 
     // Khởi tạo bàn cờ trống BOARD_SIZE x BOARD_SIZE
     roundState.board.assign(BOARD_SIZE,
@@ -104,7 +105,7 @@ static int countDir(const vector<vector<PlayerType>>& board,
     return count;
 }
 
-RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int lastMoveY)
+RoundResult checkRoundResult(RoundState& roundState, int lastMoveX, int lastMoveY)
 {
     PlayerType player = roundState.board[lastMoveX][lastMoveY];
     if (player == NONE)
@@ -115,13 +116,33 @@ RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int la
 
     for (auto& d : dirs)
     {
-        // +1 cho ô vừa đặt
-        int total = 1 + countDir(roundState.board,
-                                  lastMoveX, lastMoveY,
-                                  d[0], d[1],
-                                  player);
-        if (total >= WIN_LENGTH)
+        // Thu thập các ô liên tiếp theo hướng (dx, dy) và ngược lại
+        vector<std::pair<int,int>> cells;
+        cells.push_back({lastMoveX, lastMoveY});
+
+        // Chiều thuận
+        for (int nx = lastMoveX + d[0], ny = lastMoveY + d[1];
+             nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE
+             && roundState.board[nx][ny] == player;
+             nx += d[0], ny += d[1])
+        {
+            cells.push_back({nx, ny});
+        }
+
+        // Chiều ngược
+        for (int nx = lastMoveX - d[0], ny = lastMoveY - d[1];
+             nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE
+             && roundState.board[nx][ny] == player;
+             nx -= d[0], ny -= d[1])
+        {
+            cells.push_back({nx, ny});
+        }
+
+        if ((int)cells.size() >= WIN_LENGTH)
+        {
+            roundState.winningCells = cells;
             return (player == X) ? X_WINS : O_WINS;
+        }
     }
 
     if (roundState.turnCount == BOARD_SIZE * BOARD_SIZE)

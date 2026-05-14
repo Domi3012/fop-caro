@@ -47,22 +47,33 @@ struct ParallaxLayer
 
 static ParallaxLayer forestLayers[FOREST_LAYER_COUNT];
 
+struct BoardLayout
+{
+    float boardPixelSize;
+    float cellSize;
+    float startX;
+    float startY;
+};
+
 // Forward declarations — internal only
 static void drawParallaxBackground(float speedMultiplier = 1.0f);
 static void drawMenu(const UIState &ui);
 static void drawMenuButton(const UIState &ui);
 static void drawBoard(const MatchState &match, const UIState &ui);
-static void drawStatusPanel(const MatchState &match);
+static void drawStatusPanel(const MatchState &match, UIState &ui);
 static void drawTurnBanner(const MatchState &match);
 static void drawCharacters(float shiftX);
 static void drawPauseOverlay(const UIState &ui);
-static void drawPlayerPanel(const char *name, int health, Color accent,
+static void drawPlayerPanel(const char *name, float displayHealth, int actualHealth,
+                            Color accent,
                             float x, float y, float barW, float barH,
                             float nameFontSize, float hpFontSize);
 static void drawTurnIndicator(const MatchState &match, int screenW, int screenH);
+static void drawFloatingTexts(UIState &ui);
+static void drawWinningHighlight(const MatchState &match, const BoardLayout &layout);
 
 // --- HAM RENDER TONG ---
-void renderGame(const MatchState &match, const UIState &ui)
+void renderGame(const MatchState &match, UIState &ui)
 {
     ClearBackground(BLACK);
     switch (ui.currentScreen)
@@ -155,13 +166,7 @@ void unloadView()
     UnloadFont(font8bit);
 }
 
-struct BoardLayout
-{
-    float boardPixelSize;
-    float cellSize;
-    float startX;
-    float startY;
-};
+
 
 static BoardLayout getBoardLayout(int screenW, int screenH)
 {
@@ -545,12 +550,13 @@ static void drawPauseOverlay(const UIState &ui)
     }
 }
 
-void drawCaroGame(const MatchState &match, const UIState &ui)
+void drawCaroGame(const MatchState &match, UIState &ui)
 {
     drawParallaxBackground(0.0f);
     drawCharacters(0.0f);
-    drawStatusPanel(match);
+    drawStatusPanel(match, ui);
     drawBoard(match, ui);
+    drawFloatingTexts(ui);
     if (ui.isPaused)
         drawPauseOverlay(ui);
 }
@@ -599,6 +605,38 @@ static void drawBoard(const MatchState &match, const UIState &ui)
             }
         }
     }
+
+    // Vẽ highlight nhấp nháy các ô thắng (5 nước win)
+    drawWinningHighlight(match, layout);
+}
+
+// --- WINNING CELLS BLINK ---
+static void drawWinningHighlight(const MatchState &match, const BoardLayout &layout)
+{
+    const auto &cells = match.currentRound.winningCells;
+    if (cells.empty()) return;
+
+    // Nhấp nháy: sử dụng sin() để tạo hiệu ứng blink mượt
+    float time = (float)GetTime();
+    float blinkAlpha = 0.3f + 0.5f * (0.5f + 0.5f * std::sin(time * 6.0f)); // 0.3 ~ 0.8
+
+    Color winColor;
+    if (match.currentRound.result == X_WINS)
+        winColor = {255, 215, 0, (unsigned char)(blinkAlpha * 255)}; // Vàng gold
+    else
+        winColor = {0, 200, 255, (unsigned char)(blinkAlpha * 255)}; // Cyan
+
+    for (auto &cell : cells)
+    {
+        int row = cell.first;
+        int col = cell.second;
+        float cellX = layout.startX + col * layout.cellSize;
+        float cellY = layout.startY + row * layout.cellSize;
+
+        DrawRectangle((int)cellX, (int)cellY, (int)layout.cellSize, (int)layout.cellSize, winColor);
+        DrawRectangleLinesEx({cellX, cellY, layout.cellSize, layout.cellSize}, 3,
+                             Fade(WHITE, blinkAlpha));
+    }
 }
 static void drawTurnBanner(const MatchState &match)
 {
@@ -630,25 +668,45 @@ static void drawTurnBanner(const MatchState &match)
                {turnBoxX + paddingX, turnBoxY + paddingY},
                fontSize, 0, RAYWHITE);
 }
-static void drawPlayerPanel(const char *name, int health, Color accent,
+static void drawPlayerPanel(const char *name, float displayHealth, int actualHealth,
+                            Color accent,
                             float x, float y, float barW, float barH,
                             float nameFontSize, float hpFontSize)
 {
     Color hpBg = Fade(RAYWHITE, 0.16f);
     Color hpBorder = Fade(WHITE, 0.90f);
 
-    DrawRectangle((int)(x - 20), (int)(y - 20), (int)(barW + 40), 150, Fade(BLACK, 0.50f));
+    // Tính chiều cao tổng của panel dựa trên nội dung thực tế
+    Vector2 nameSize = MeasureTextEx(font8bit, name, nameFontSize, 0);
+    float nameBlockH = nameSize.y;                     // chiều cao tên
+    float gap1 = 12.0f;                                 // khoảng cách tên -> thanh HP
+    float gap2 = 10.0f;                                 // khoảng cách thanh HP -> text HP
+    Vector2 hpTextSize = MeasureTextEx(font8bit, TextFormat("HP: %d/%d", actualHealth, MAX_HEALTH), hpFontSize, 0);
+    float hpTextBlockH = hpTextSize.y;
+
+    float contentH = nameBlockH + gap1 + barH + gap2 + hpTextBlockH;
+    float panelPadding = 16.0f;
+    float panelH = contentH + panelPadding * 2.0f;
+    float panelW = barW + 40.0f;
+
+    // Vẽ background panel
+    DrawRectangle((int)(x - 20), (int)(y - panelPadding), (int)panelW, (int)panelH, Fade(BLACK, 0.50f));
+
+    // Vẽ tên (căn dọc chính xác theo MeasureTextEx)
     DrawTextEx(font8bit, name, {x, y}, nameFontSize, 0, accent);
 
-    float hpFill = barW * ((float)health / MAX_HEALTH);
-    float barY = y + nameFontSize + 12;
+    // Thanh HP mượt (dùng displayHealth thay vì actualHealth)
+    float hpFill = barW * (displayHealth / (float)MAX_HEALTH);
+    if (hpFill < 0.0f) hpFill = 0.0f;
+    float barY = y + nameBlockH + gap1;
     DrawRectangle((int)x, (int)barY, (int)barW, (int)barH, hpBg);
     DrawRectangle((int)x, (int)barY, (int)hpFill, (int)barH, accent);
     DrawRectangleLinesEx({x, barY, barW, barH}, 3, hpBorder);
 
+    // Text HP (hiển thị số thực tế, không phải display)
     DrawTextEx(font8bit,
-               TextFormat("HP: %d/%d", health, MAX_HEALTH),
-               {x, barY + barH + 12}, hpFontSize, 0, RAYWHITE);
+               TextFormat("HP: %d/%d", actualHealth, MAX_HEALTH),
+               {x, barY + barH + gap2}, hpFontSize, 0, RAYWHITE);
 }
 
 static void drawTurnIndicator(const MatchState &match, int screenW, int screenH)
@@ -670,22 +728,81 @@ static void drawTurnIndicator(const MatchState &match, int screenW, int screenH)
                turnFontSize, 0, RAYWHITE);
 }
 
-static void drawStatusPanel(const MatchState &match)
+static void drawStatusPanel(const MatchState &match, UIState &ui)
 {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    float nameFontSize = screenH * 0.08f;
-    float hpFontSize = screenH * 0.035f;
-    float barW = screenW * 0.20f;
-    float barH = screenH * 0.045f;
+    // --- Smooth HP interpolation (lerp) ---
+    float dt = GetFrameTime();
+    float lerpSpeed = 2.5f; // tốc độ nội suy (càng lớn càng nhanh)
 
-    drawPlayerPanel("Player X", match.playerX.health, RED,
+    float targetX = (float)match.playerX.health;
+    float targetO = (float)match.playerO.health;
+
+    // Lerp: displayHealth tiến dần về targetHealth
+    ui.displayHealthX += (targetX - ui.displayHealthX) * lerpSpeed * dt;
+    ui.displayHealthO += (targetO - ui.displayHealthO) * lerpSpeed * dt;
+
+    // Snap khi đủ gần
+    if (std::fabs(ui.displayHealthX - targetX) < 0.5f) ui.displayHealthX = targetX;
+    if (std::fabs(ui.displayHealthO - targetO) < 0.5f) ui.displayHealthO = targetO;
+
+    float nameFontSize = screenH * 0.06f;
+    float hpFontSize = screenH * 0.03f;
+    float barW = screenW * 0.20f;
+    float barH = screenH * 0.04f;
+
+    drawPlayerPanel("Player X", ui.displayHealthX, match.playerX.health, RED,
                     screenW * 0.05f, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
-    drawPlayerPanel("Player O", match.playerO.health, BLUE,
+    drawPlayerPanel("Player O", ui.displayHealthO, match.playerO.health, BLUE,
                     screenW * 0.95f - barW, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
 
     drawTurnIndicator(match, screenW, screenH);
+}
+
+// --- FLOATING DAMAGE/HEAL TEXT ---
+static void drawFloatingTexts(UIState &ui)
+{
+    float dt = GetFrameTime();
+    int screenH = GetScreenHeight();
+    float fontSize = screenH * 0.06f;
+
+    for (int i = (int)ui.floatingTexts.size() - 1; i >= 0; --i)
+    {
+        auto &ft = ui.floatingTexts[i];
+        ft.timer -= dt;
+
+        if (ft.timer <= 0.0f)
+        {
+            ui.floatingTexts.erase(ui.floatingTexts.begin() + i);
+            continue;
+        }
+
+        // Tiến trình: 1.0 -> 0.0
+        float progress = ft.timer / ft.maxTimer;
+
+        // Bay lên + fade out
+        float offsetY = (1.0f - progress) * screenH * 0.08f;
+        float alpha = progress;
+
+        // Scale nhỏ dần
+        float scale = 0.7f + 0.3f * progress;
+        float currentFontSize = fontSize * scale;
+
+        Vector2 textSize = MeasureTextEx(font8bit, ft.text.c_str(), currentFontSize, 2);
+        float drawX = ft.x - textSize.x / 2.0f;
+        float drawY = ft.y - offsetY;
+
+        // Shadow
+        DrawTextEx(font8bit, ft.text.c_str(),
+                   {drawX + 3, drawY + 3}, currentFontSize, 2,
+                   Fade(BLACK, alpha * 0.6f));
+        // Main text
+        DrawTextEx(font8bit, ft.text.c_str(),
+                   {drawX, drawY}, currentFontSize, 2,
+                   Fade(ft.color, alpha));
+    }
 }
 // nhom game over: Lam tam
 void drawGameOver(const MatchState &match, const UIState &ui)
