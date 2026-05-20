@@ -332,12 +332,8 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
 
     if (isDirRight())
     {
-<<<<<<< HEAD
-        if (ui.characterMenuIndex < 3)
+        if (ui.characterMenuIndex < 4)
         {
-=======
-        if (ui.characterMenuIndex < 4) {
->>>>>>> 4286fe6 (feat: Add new character system and Sorcerer class)
             ui.characterMenuIndex++;
             playSFX(SFX_CLICK);
         }

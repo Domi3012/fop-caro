@@ -742,7 +742,6 @@ static void drawStatusPanel(const MatchState &match, UIState &ui)
     float dt = GetFrameTime();
     float lerpSpeed = 2.5f; // tốc độ nội suy (càng lớn càng nhanh)
 
-<<<<<<< HEAD
     float targetX = (float)match.playerX.health;
     float targetO = (float)match.playerO.health;
 
