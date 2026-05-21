@@ -129,6 +129,179 @@ static void applyDisplaySettings(UIState &ui)
         }
     }
 }
+// undoMove:
+// Undo the most recent move from the board
+// In PVE mode, if the last move was by the bot, undo both bot and player moves
+void undoMove(MatchState &match, UIState &ui)
+{
+    RoundState &round = match.currentRound;
+
+    // Check preconditions: round must be ongoing
+    if (round.result != ONGOING)
+    {
+        return;
+    }
+
+    // Check if undoStack is not empty
+    if (ui.undoStack.empty())
+    {
+        return;
+    }
+
+    // Get the last move from undoStack
+    MoveRecord lastMove = ui.undoStack.back();
+    ui.undoStack.pop_back();
+
+    // Remove piece from board
+    round.board[lastMove.row][lastMove.col] = NONE;
+
+    // Add move to redoStack
+    ui.redoStack.push_back(lastMove);
+
+    // Mark move as undone in moveHistory
+    for (auto &m : ui.moveHistory)
+    {
+        if (m.row == lastMove.row && m.col == lastMove.col && m.player == lastMove.player && !m.isUndone)
+        {
+            m.isUndone = true;
+            break;
+        }
+    }
+
+    // Decrement turn count
+    round.turnCount--;
+
+    // Handle PVE mode: if last move was bot's, undo player's previous move too
+    if (ui.isPVE && lastMove.player == O)
+    {
+        // Set turn back to player
+        round.toMove = X;
+
+        // Check if there's a player move to undo
+        if (!ui.undoStack.empty())
+        {
+            MoveRecord playerMove = ui.undoStack.back();
+
+            // Only undo if it's the player's move
+            if (playerMove.player == X)
+            {
+                ui.undoStack.pop_back();
+
+                // Remove player's piece from board
+                round.board[playerMove.row][playerMove.col] = NONE;
+
+                // Add to redoStack
+                ui.redoStack.push_back(playerMove);
+
+                // Mark as undone in moveHistory
+                for (auto &m : ui.moveHistory)
+                {
+                    if (m.row == playerMove.row && m.col == playerMove.col && m.player == playerMove.player && !m.isUndone)
+                    {
+                        m.isUndone = true;
+                        break;
+                    }
+                }
+
+                // Decrement turn count again
+                round.turnCount--;
+            }
+        }
+    }
+    else
+    {
+        // PVP mode or player's move in PVE: switch turn back to the player who made the move
+        round.toMove = lastMove.player;
+    }
+}
+
+// redoMove:
+// Redo the most recently undone move
+// In PVE mode, if the top move in redoStack was bot's, redo both player and bot moves
+void redoMove(MatchState &match, UIState &ui)
+{
+    RoundState &round = match.currentRound;
+
+    // Check preconditions: round must be ongoing
+    if (round.result != ONGOING)
+    {
+        return;
+    }
+
+    // Check if redoStack is not empty
+    if (ui.redoStack.empty())
+    {
+        return;
+    }
+
+    // Get the top move from redoStack
+    MoveRecord move = ui.redoStack.back();
+    ui.redoStack.pop_back();
+
+    // Place piece back on board at (row, col)
+    round.board[move.row][move.col] = move.player;
+
+    // Push move to undoStack
+    ui.undoStack.push_back(move);
+
+    // Mark move as not undone in moveHistory
+    for (auto &m : ui.moveHistory)
+    {
+        if (m.row == move.row && m.col == move.col && m.player == move.player && m.isUndone)
+        {
+            m.isUndone = false;
+            break;
+        }
+    }
+
+    // Increment turn count
+    round.turnCount++;
+
+    // Handle PVE mode: if top move in redoStack was bot's, redo both player and bot moves
+    if (ui.isPVE && move.player == X && !ui.redoStack.empty())
+    {
+        // Check if next move in redoStack is bot's move
+        MoveRecord &nextMove = ui.redoStack.back();
+        if (nextMove.player == O)
+        {
+            // Redo bot's move too
+            ui.redoStack.pop_back();
+
+            // Place bot's piece back on board
+            round.board[nextMove.row][nextMove.col] = nextMove.player;
+
+            // Push bot's move to undoStack
+            ui.undoStack.push_back(nextMove);
+
+            // Mark bot's move as not undone in moveHistory
+            for (auto &m : ui.moveHistory)
+            {
+                if (m.row == nextMove.row && m.col == nextMove.col && m.player == nextMove.player && m.isUndone)
+                {
+                    m.isUndone = false;
+                    break;
+                }
+            }
+
+            // Increment turn count again
+            round.turnCount++;
+
+            // Switch turn to bot (opposite player after bot's move)
+            round.toMove = X;
+        }
+        else
+        {
+            // Only player's move was redone, switch turn to bot
+            round.toMove = O;
+        }
+    }
+    else
+    {
+        // PVP mode or bot's move in PVE: switch turn to opposite player
+        round.toMove = (move.player == X) ? O : X;
+    }
+}
+
 // Xử lý một nước đi tại ô (x=row, y=col):
 //   1. Kiểm tra nước đi hợp lệ.
 //   2. Ghi nước đi vào board.
@@ -145,12 +318,29 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
 
     makeMove(round, x, y);
 
-    // Ghi lại lịch sử nước đi
-    Move m;
-    m.x = x;
-    m.y = y;
-    m.type = round.board[x][y]; // Loại quân vừa đặt (X hoặc O)
-    ui.moveHistory.push_back(m);
+    // Create MoveRecord for undo/redo functionality
+    MoveRecord mr;
+    mr.row = x;
+    mr.col = y;
+    mr.player = round.board[x][y];
+    mr.isUndone = false;
+
+    // Add to moveHistory (complete history with undo status)
+    ui.moveHistory.push_back(mr);
+
+    // Clear redo stack when new move is made (Requirement 2.5)
+    ui.redoStack.clear();
+
+    // Implement move history capacity management (Requirements 1.10, 1.11)
+    // Check if undoStack is at capacity before adding new move
+    if (ui.undoStack.size() >= MAX_UNDO_CAPACITY)
+    {
+        // Remove oldest move from undoStack
+        ui.undoStack.erase(ui.undoStack.begin());
+    }
+
+    // Add new move to undoStack
+    ui.undoStack.push_back(mr);
 
     RoundResult rr = checkRoundResult(round, x, y);
 
@@ -352,15 +542,19 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
             playSFX(SFX_CLICK);
 
             Player playerX;
+            playerX.name = ui.playerXName.empty() ? "Player X" : ui.playerXName;
             playerX.character = match.playerX.character;
             playerX.health = MAX_HEALTH;
 
             Player playerO;
+            playerO.name = ui.playerOName.empty() ? (ui.isPVE ? "Bot" : "Player O") : ui.playerOName;
             playerO.character = match.playerO.character;
             playerO.health = MAX_HEALTH;
 
             initMatch(match, playerX, playerO);
             ui.moveHistory.clear(); // Xoá lịch sử cho game mới
+            ui.undoStack.clear();   // Clear undo stack for new game
+            ui.redoStack.clear();   // Clear redo stack for new game
             ui.displayHealthX = (float)MAX_HEALTH;
             ui.displayHealthO = (float)MAX_HEALTH;
             ui.floatingTexts.clear();
@@ -466,6 +660,20 @@ void handleGameplayInput(MatchState &match, UIState &ui)
         }
     }
 
+    // Undo: phím Z
+    if (IsKeyPressed('Z') || IsKeyPressed('z'))
+    {
+        undoMove(match, ui);
+        return;
+    }
+
+    // Redo: phím X
+    if (IsKeyPressed('X') || IsKeyPressed('x'))
+    {
+        redoMove(match, ui);
+        return;
+    }
+
     // Đặt quân
     if (isConfirm())
     {
@@ -538,6 +746,8 @@ void handleRoundOverInput(MatchState &match, UIState &ui)
         }
 
         ui.moveHistory.clear(); // Xoá lịch sử cho round mới
+        ui.undoStack.clear();   // Clear undo stack for new round (Requirement 1.9)
+        ui.redoStack.clear();   // Clear redo stack for new round (Requirement 1.9)
         startMatch(ui);
     }
 }
@@ -617,9 +827,10 @@ void handleModeSelectionInput(UIState &ui)
         }
         else
         {
-            ui.currentScreen = CHARACTER_SELECTION;
-            ui.isSelectingX = true;
-            ui.characterMenuIndex = 1;
+            // PVP: chuyển sang màn nhập tên trước khi chọn nhân vật
+            ui.currentScreen = NAME_INPUT;
+            ui.isEnteringPlayerXName = true;
+            ui.nameInputBuffer.clear();
         }
     }
 
@@ -688,6 +899,10 @@ void handleInput(MatchState &match, UIState &ui)
 
     case MODE_SELECTION:
         handleModeSelectionInput(ui);
+        break;
+
+    case NAME_INPUT:
+        handleNameInputScreen(match, ui);
         break;
 
     case CHARACTER_SELECTION:
@@ -776,7 +991,9 @@ void handleLoadGameInput(MatchState &match, UIState &ui, std::vector<std::string
     if (isConfirm())
     {
         ui.moveHistory.clear();
-        if (loadGame(match, ui.moveHistory, saveFiles[ui.loadMenuIndex]))
+        ui.undoStack.clear(); // Clear undo stack before loading
+        ui.redoStack.clear(); // Clear redo stack before loading
+        if (loadGame(match, ui.moveHistory, ui.undoStack, ui.redoStack, saveFiles[ui.loadMenuIndex]))
         {
             ui.displayHealthX = (float)match.playerX.health;
             ui.displayHealthO = (float)match.playerO.health;
@@ -859,7 +1076,7 @@ void handleSaveGameInput(MatchState &match, UIState &ui)
         // Tạo tên file: <tên>_<ngày giờ>.txt
         std::string filename = ui.saveNameInput + "_" + timeBuf + ".txt";
 
-        saveGame(match, ui.moveHistory, filename);
+        saveGame(match, ui.moveHistory, ui.undoStack, ui.redoStack, filename);
         ui.isPaused = false;
         ui.currentScreen = GAME_BOARD;
         return;
@@ -880,6 +1097,89 @@ void handleSaveGameInput(MatchState &match, UIState &ui)
         ui.saveNameError = false;
         key = GetCharPressed();
     }
+}
+
+void handleNameInputScreen(MatchState &match, UIState &ui)
+{
+    // ESC: quay lại màn hình trước đó
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
+        ui.nameInputBuffer.clear();
+        ui.currentScreen = MAIN_MENU;
+        ui.mainMenuIndex = 0;
+        return;
+    }
+
+    // Backspace: xoá kí tự cuối
+    if (IsKeyPressed(KEY_BACKSPACE))
+    {
+        if (!ui.nameInputBuffer.empty())
+            ui.nameInputBuffer.pop_back();
+        return;
+    }
+
+    // Enter: xác nhận tên
+    if (isConfirm())
+    {
+        // Trim whitespace
+        std::string trimmed;
+        for (char c : ui.nameInputBuffer)
+        {
+            if (c != ' ' && c != '\t')
+                trimmed += c;
+        }
+
+        // Dùng tên mặc định nếu rỗng
+        if (trimmed.empty())
+        {
+            trimmed = ui.isEnteringPlayerXName ? "Player X" : "Player O";
+        }
+
+        if (ui.isEnteringPlayerXName)
+        {
+            ui.playerXName = trimmed;
+
+            if (ui.isPVE)
+            {
+                // PVE: Bot auto name, chuyển sang chọn nhân vật
+                ui.playerOName = "Bot";
+                ui.currentScreen = CHARACTER_SELECTION;
+                ui.isSelectingX = true;
+                ui.characterMenuIndex = 1;
+            }
+            else
+            {
+                // PVP: chuyển sang nhập tên O
+                ui.isEnteringPlayerXName = false;
+                ui.nameInputBuffer.clear();
+            }
+        }
+        else
+        {
+            // PVP: đã nhập xong tên O
+            ui.playerOName = trimmed;
+            ui.currentScreen = CHARACTER_SELECTION;
+            ui.isSelectingX = true;
+            ui.characterMenuIndex = 1;
+        }
+        return;
+    }
+
+    // Nhập kí tự
+    int key = GetCharPressed();
+    while (key > 0)
+    {
+        // Cho phép chữ, số, khoảng trắng, gạch ngang, dấu nháy
+        if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z') ||
+            (key >= '0' && key <= '9') || key == ' ' || key == '-' || key == '\'')
+        {
+            if (ui.nameInputBuffer.size() < 20)
+                ui.nameInputBuffer += (char)key;
+        }
+        key = GetCharPressed();
+    }
+
+    (void)match;
 }
 
 void handleSettingsInput(UIState &ui)
@@ -1032,9 +1332,10 @@ void handleBotDifficultyInput(UIState &ui)
     {
         ui.botDifficulty = static_cast<BotDifficulty>(ui.botDifficultyIndex);
 
-        ui.currentScreen = CHARACTER_SELECTION;
-        ui.isSelectingX = true;
-        ui.characterMenuIndex = 1;
+        // PVE: chuyển sang màn nhập tên trước khi chọn nhân vật
+        ui.currentScreen = NAME_INPUT;
+        ui.isEnteringPlayerXName = true;
+        ui.nameInputBuffer.clear();
     }
 
     if (IsKeyPressed(KEY_ESCAPE))

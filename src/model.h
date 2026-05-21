@@ -16,6 +16,9 @@ constexpr int BOARD_SIZE = 12;  // Kích thước bàn cờ (12 x 12)
 // Số quân liên tiếp tối thiểu để thắng
 constexpr int WIN_LENGTH = 5;
 
+// Undo/Redo capacity
+constexpr int MAX_UNDO_CAPACITY = 100; // Maximum number of moves that can be undone
+
 // ============================================================
 // II. Enum
 // ============================================================
@@ -76,6 +79,15 @@ struct Move
     PlayerType type; // X or O
 };
 
+// Move record with undo status for undo/redo functionality
+struct MoveRecord
+{
+    int row;              // 0 to BOARD_SIZE-1
+    int col;              // 0 to BOARD_SIZE-1
+    PlayerType player;    // X or O
+    bool isUndone;        // true if this move has been undone
+};
+
 struct ResolutionOption
 {
     int width;
@@ -106,3 +118,14 @@ void makeMove(RoundState &roundState, int x, int y);
 RoundResult checkRoundResult(RoundState &roundState, int lastMoveX, int lastMoveY);
 void executeAttack(Player &attacker, Player &defender, int turnCount);
 RoundResult checkMatchResult(const MatchState &matchState);
+
+// ============================================================
+// VI. Hàm xử lý tên người chơi
+// ============================================================
+
+// Validates if a character is allowed in player names
+// Accepts: alphanumeric (A-Z, a-z, 0-9), space, hyphen (-), apostrophe ('), Vietnamese Unicode
+bool isValidNameChar(int key);
+
+// Removes leading and trailing whitespace from a string
+string trimWhitespace(const string& str);

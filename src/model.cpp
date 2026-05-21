@@ -217,3 +217,46 @@ const ResolutionOption RESOLUTIONS[] =
 };
 
 const int RESOLUTION_COUNT = sizeof(RESOLUTIONS) / sizeof(RESOLUTIONS[0]);
+
+
+// ============================================================
+// Hàm xử lý tên người chơi
+// ============================================================
+
+bool isValidNameChar(int key)
+{
+    // Alphabetic: A-Z, a-z
+    if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z'))
+        return true;
+    
+    // Numeric: 0-9
+    if (key >= '0' && key <= '9')
+        return true;
+    
+    // Space
+    if (key == ' ')
+        return true;
+    
+    // Hyphen and apostrophe
+    if (key == '-' || key == '\'')
+        return true;
+    
+    // Vietnamese Unicode characters
+    // Unicode range for Vietnamese characters with diacritics
+    // Covers: À-ỹ (U+00C0 to U+1EF9)
+    if (key >= 0x00C0 && key <= 0x1EF9)
+        return true;
+    
+    return false;
+}
+
+string trimWhitespace(const string& str)
+{
+    size_t start = str.find_first_not_of(" \t\n\r");
+    size_t end = str.find_last_not_of(" \t\n\r");
+    
+    if (start == string::npos)
+        return "";
+    
+    return str.substr(start, end - start + 1);
+}
