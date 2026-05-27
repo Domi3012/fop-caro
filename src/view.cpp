@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cctype>
 #include "audio_manager.h"
+#include "sprite_manager.h"
 
 using std::string;
 using std::vector;
@@ -62,9 +63,9 @@ static void drawMenuButton(const UIState &ui);
 static void drawBoard(const MatchState &match, const UIState &ui);
 static void drawStatusPanel(const MatchState &match, UIState &ui);
 static void drawTurnBanner(const MatchState &match);
-static void drawCharacters(float shiftX);
+static void drawCharacters(const MatchState &match, float shiftX);
 static void drawPauseOverlay(const UIState &ui);
-static void drawPlayerPanel(const char *name, float displayHealth, int actualHealth,
+static void drawPlayerPanel(const char *name, float displayHealth, int actualHealth, int maxHealth,
                             Color accent,
                             float x, float y, float barW, float barH,
                             float nameFontSize, float hpFontSize);
@@ -198,27 +199,35 @@ static BoardLayout getBoardLayout(int screenW, int screenH)
     return {boardPixelSize, cellSize, startX, startY};
 }
 
-static void drawCharacters(float shiftX)
+static void drawCharacters(const MatchState &match, float shiftX)
 {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    // Ve placeholder hinh chu nhat
-    float charW = screenW * 0.08f;
-    float charH = screenH * 0.20f;
+    // Ground platform at 95% screen height
+    float baseGroundY = screenH * 0.95f;
 
-    float baseGroundY = screenH * 0.85f; // Platform khoang 85% manh hinh
+    // Sprite height is 20% of screen height
+    float spriteH = screenH * 0.20f;
+    float scale = spriteH / 64.0f;
+    float spriteW = 64.0f * scale;
 
-    float posX_X = screenW * 0.15f + shiftX - charW / 2.0f;
-    float posX_O = screenW * 0.85f + shiftX - charW / 2.0f;
+    float posX_X = screenW * 0.15f + shiftX - spriteW / 2.0f;
+    float posX_O = screenW * 0.85f + shiftX - spriteW / 2.0f;
 
-    DrawRectangle(posX_X, baseGroundY - charH, charW, charH, Fade(RED, 0.8f));
-    DrawRectangleLinesEx({posX_X, baseGroundY - charH, charW, charH}, 3, WHITE);
-    DrawTextEx(font8bit, "X", {posX_X + charW / 2.0f - 15, baseGroundY - charH / 2.0f - 20}, 40, 2, WHITE);
+    // Retrieve and update animations
+    CharacterSprite &csX = getCharacterSprite(match.playerX.character);
+    CharacterSprite &csO = getCharacterSprite(match.playerO.character);
 
-    DrawRectangle(posX_O, baseGroundY - charH, charW, charH, Fade(BLUE, 0.8f));
-    DrawRectangleLinesEx({posX_O, baseGroundY - charH, charW, charH}, 3, WHITE);
-    DrawTextEx(font8bit, "O", {posX_O + charW / 2.0f - 15, baseGroundY - charH / 2.0f - 20}, 40, 2, WHITE);
+    // If game is active or intro is running, update the idle/active animations
+    updateCharacterAnimation(csX, GetFrameTime());
+    updateCharacterAnimation(csO, GetFrameTime());
+
+    // Draw Player X (facing right)
+    drawCharacterSprite(csX, posX_X, baseGroundY - spriteH, scale, false);
+
+    // Draw Player O (facing left - flipped)
+    drawCharacterSprite(csO, posX_O, baseGroundY - spriteH, scale, true);
 }
 
 // --- PARALLAX BACKGROUND ---
@@ -424,60 +433,153 @@ void drawCharSelection(const UIState &ui)
         headerText = "PLAYER O IS CHOOSING";
         headerColor = BLUE;
     }
-    float headerFontSize = screenH * 0.08f;
+    float headerFontSize = screenH * 0.05f; // Slightly smaller to look more balanced
     Vector2 headerSize = MeasureTextEx(font8bit, headerText, headerFontSize, 2);
-    DrawTextEx(font8bit, headerText, {screenW / 2.0f - headerSize.x / 2.0f, panelY + screenH * 0.05f}, headerFontSize, 2, headerColor);
+    DrawTextEx(font8bit, headerText, {screenW / 2.0f - headerSize.x / 2.0f, panelY + screenH * 0.03f}, headerFontSize, 2, headerColor);
 
-    // Character Box Placeholder
-    float boxW = panelW * 0.3f;
-    float boxH = panelH * 0.4f;
-    float boxX = screenW / 2.0f - boxW / 2.0f;
-    float boxY = panelY + screenH * 0.18f;
+    // === REDESIGNED SPLIT PANEL LAYOUT ===
+    float contentY = panelY + screenH * 0.10f;
+    float contentH = panelH - screenH * 0.22f;
+    float contentW = panelW - screenW * 0.06f;
+    float contentX = panelX + screenW * 0.03f;
 
+    // 1. Left Box: Character Preview (Animated Sprite)
+    float leftW = contentW * 0.40f;
+    float leftH = contentH;
+    float leftX = contentX;
+    float leftY = contentY;
+
+    // 2. Right Column
+    float rightW = contentW * 0.55f;
+    float rightX = contentX + leftW + contentW * 0.05f;
+    float rightY = contentY;
+
+    float nameBoxH = leftH * 0.20f;
+    float statsBoxH = leftH * 0.75f;
+    float statsBoxY = rightY + nameBoxH + leftH * 0.05f;
+
+    // Determine current character details based on menu index
     Color charColor;
     const char *charName;
-    const char *charDesc;
+    int baseHp = 0;
+    int baseDmg = 0;
+    CharacterType currentType = ASSASSIN;
 
     switch (ui.characterMenuIndex)
     {
     case 1:
         charName = "ASSASSIN";
-        charColor = Fade(PURPLE, 0.8f);
-        charDesc = "Skill: +5 DMG per pair of turns (x - o)";
+        charColor = PURPLE;
+        baseHp = 650;
+        baseDmg = 120;
+        currentType = ASSASSIN;
         break;
     case 2:
         charName = "BRUISER";
-        charColor = Fade(ORANGE, 0.8f);
-        charDesc = "Skill: Reflect 25% of received damage";
+        charColor = ORANGE;
+        baseHp = 1600;
+        baseDmg = 70;
+        currentType = BRUISER;
         break;
     case 3:
         charName = "VAMPIRE";
-        charColor = Fade(DARKGREEN, 0.8f);
-        charDesc = "Skill: Heal 30% of damage dealt";
+        charColor = DARKGREEN;
+        baseHp = 800;
+        baseDmg = 100;
+        currentType = VAMPIRE;
         break;
     case 4:
     default:
         charName = "SORCERER";
-        charColor = Fade(SKYBLUE, 0.8f);
-        charDesc = "Skill: Applies poison stack on win. Deals 5 DMG per stack every 2 turns.";
+        charColor = SKYBLUE;
+        baseHp = 750;
+        baseDmg = 50;
+        currentType = SORCERER;
         break;
     }
 
-    // Draw box
-    DrawRectangle(boxX, boxY, boxW, boxH, charColor);
-    DrawRectangleLinesEx({boxX, boxY, boxW, boxH}, 5, WHITE); // Khung net dut
-    DrawTextEx(font8bit, "?", {boxX + boxW / 2.0f - 20, boxY + boxH / 2.0f - 40}, 80, 2, Fade(WHITE, 0.5f));
+    // --- LEFT COLUMN: Sprite Preview ---
+    DrawRectangle(leftX, leftY, leftW, leftH, Fade(charColor, 0.12f));
+    DrawRectangleLinesEx({leftX, leftY, leftW, leftH}, 3, charColor);
 
-    // Char Name
-    float nameFontSize = screenH * 0.05f;
+    // Get and update animation
+    CharacterSprite &cs = getCharacterSprite(currentType);
+    setAnimation(cs, ANIM_IDLE);
+    updateCharacterAnimation(cs, GetFrameTime());
+
+    // Scale sprite relative to panel height (so it's resolution-independent!)
+    float spriteSize = leftH * 0.65f;
+    float spriteScale = spriteSize / 64.0f;
+    float spriteX = leftX + (leftW - spriteSize) / 2.0f;
+    float spriteY = leftY + (leftH - spriteSize) / 2.0f;
+
+    drawCharacterSprite(cs, spriteX, spriteY, spriteScale, false);
+
+    // --- RIGHT COLUMN: Top (Character Name) ---
+    DrawRectangle(rightX, rightY, rightW, nameBoxH, Fade(charColor, 0.25f));
+    DrawRectangleLinesEx({rightX, rightY, rightW, nameBoxH}, 3, charColor);
+
+    float nameFontSize = nameBoxH * 0.6f;
     Vector2 nameSize = MeasureTextEx(font8bit, charName, nameFontSize, 2);
-    DrawTextEx(font8bit, charName, {screenW / 2.0f - nameSize.x / 2.0f, boxY + boxH + screenH * 0.02f}, nameFontSize, 2, buttonYellow);
+    DrawTextEx(font8bit, charName, {rightX + (rightW - nameSize.x) / 2.0f, rightY + (nameBoxH - nameSize.y) / 2.0f}, nameFontSize, 2, WHITE);
 
-    // Description
-    float descFontSize = screenH * 0.035f;
-    Vector2 descSize = MeasureTextEx(font8bit, charDesc, descFontSize, 1);
-    DrawTextEx(font8bit, charDesc, {screenW / 2.0f - descSize.x / 2.0f, boxY + boxH + screenH * 0.09f}, descFontSize, 1, Fade(WHITE, 0.9f));
+    // --- RIGHT COLUMN: Bottom (Stats & Skill Box) ---
+    DrawRectangle(rightX, statsBoxY, rightW, statsBoxH, Fade(BLACK, 0.4f));
+    DrawRectangleLinesEx({rightX, statsBoxY, rightW, statsBoxH}, 2, Fade(WHITE, 0.2f));
 
+    float padX = rightW * 0.05f;
+    float padY = statsBoxH * 0.08f;
+    float rowH = statsBoxH * 0.13f;
+    float statTextSize = statsBoxH * 0.08f;
+
+    // HP Line
+    std::string hpText = "BASE HP:  " + std::to_string(baseHp);
+    DrawTextEx(font8bit, hpText.c_str(), {rightX + padX, statsBoxY + padY}, statTextSize, 1, GREEN);
+
+    // Damage Line
+    std::string dmgText = "BASE DMG: " + std::to_string(baseDmg);
+    DrawTextEx(font8bit, dmgText.c_str(), {rightX + padX, statsBoxY + padY + rowH}, statTextSize, 1, ORANGE);
+
+    // Skill Header
+    DrawTextEx(font8bit, "SPECIAL SKILL:", {rightX + padX, statsBoxY + padY + rowH * 2.0f}, statsBoxH * 0.07f, 1, buttonYellow);
+
+    // Skill Description Lines (Manually wrapped for pixel-perfect display)
+    std::vector<std::string> skillLines;
+    if (ui.characterMenuIndex == 1) {
+        skillLines = {
+            "+5 basic DMG per pair of turns (X - O).",
+            "Resets to 120 when a player wins/loses",
+            "the round."
+        };
+    } else if (ui.characterMenuIndex == 2) {
+        skillLines = {
+            "Thorns: Reflects 25% of any received",
+            "damage back to the attacker passively."
+        };
+    } else if (ui.characterMenuIndex == 3) {
+        skillLines = {
+            "Lifesteal: Heals player health by 30%",
+            "of actual damage dealt during successful",
+            "attacks."
+        };
+    } else {
+        skillLines = {
+            "Burn: Winning a round applies a Burn stack.",
+            "Opponent takes 5 DMG per stack every pair",
+            "of turns (X - O). Stacks infinitely."
+        };
+    }
+
+    float skillLineFontSize = statsBoxH * 0.072f;
+    float startY = statsBoxY + padY + rowH * 3.1f;
+    for (size_t i = 0; i < skillLines.size(); ++i)
+    {
+        DrawTextEx(font8bit, skillLines[i].c_str(),
+                   {rightX + padX, startY + i * (skillLineFontSize * 1.35f)},
+                   skillLineFontSize, 1, Fade(WHITE, 0.9f));
+    }
+
+    // --- FOOTER & NAVIGATION ---
     // Indicators (● ● ○)
     float dotGap = 40.0f;
     float dotsStartX = screenW / 2.0f - dotGap * 1.5f;
@@ -510,7 +612,7 @@ void drawGameIntro(const MatchState &match, const UIState &ui)
     float speedMultiplier = velocity / 30.0f;
 
     drawParallaxBackground(speedMultiplier);
-    drawCharacters(ui.introCamX);
+    drawCharacters(match, ui.introCamX);
 }
 
 // Nhom ban co
@@ -569,7 +671,7 @@ static void drawPauseOverlay(const UIState &ui)
 void drawCaroGame(const MatchState &match, UIState &ui)
 {
     drawParallaxBackground(0.0f);
-    drawCharacters(0.0f);
+    drawCharacters(match, 0.0f);
     drawStatusPanel(match, ui);
     drawBoard(match, ui);
     drawFloatingTexts(ui);
@@ -702,7 +804,7 @@ static void drawPlayerPanel(const char *name, float displayHealth, int actualHea
     float nameBlockH = nameSize.y; // chiều cao tên
     float gap1 = 12.0f;            // khoảng cách tên -> thanh HP
     float gap2 = 10.0f;            // khoảng cách thanh HP -> text HP
-    Vector2 hpTextSize = MeasureTextEx(font8bit, TextFormat("HP: %d/%d", actualHealth, MAX_HEALTH), hpFontSize, 0);
+    Vector2 hpTextSize = MeasureTextEx(font8bit, TextFormat("HP: %d/%d", actualHealth, maxHealth), hpFontSize, 0);
     float hpTextBlockH = hpTextSize.y;
 
     float contentH = nameBlockH + gap1 + barH + gap2 + hpTextBlockH;
@@ -783,9 +885,9 @@ static void drawStatusPanel(const MatchState &match, UIState &ui)
     const char *xName = match.playerX.name.empty() ? "Player X" : match.playerX.name.c_str();
     const char *oName = match.playerO.name.empty() ? "Player O" : match.playerO.name.c_str();
 
-    drawPlayerPanel(xName, ui.displayHealthX, match.playerX.health, RED,
+    drawPlayerPanel(xName, ui.displayHealthX, match.playerX.health, match.playerX.maxHealth, RED,
                     screenW * 0.05f, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
-    drawPlayerPanel(oName, ui.displayHealthO, match.playerO.health, BLUE,
+    drawPlayerPanel(oName, ui.displayHealthO, match.playerO.health, match.playerO.maxHealth, BLUE,
                     screenW * 0.95f - barW, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
 
     drawTurnIndicator(match, screenW, screenH);
@@ -842,7 +944,7 @@ void drawGameOver(const MatchState &match, const UIState &ui)
     int screenH = GetScreenHeight();
 
     drawParallaxBackground(0.0f); // Lock background
-    drawCharacters(0.0f);
+    drawCharacters(match, 0.0f);
 
     const char *xName = match.playerX.name.empty() ? "X" : match.playerX.name.c_str();
     const char *oName = match.playerO.name.empty() ? "O" : match.playerO.name.c_str();

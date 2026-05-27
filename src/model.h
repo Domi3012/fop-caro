@@ -10,7 +10,6 @@ using std::vector;
 // I. Hằng số
 // ============================================================
 
-constexpr int MAX_HEALTH = 100; // Máu tối đa của mỗi nhân vật
 constexpr int BOARD_SIZE = 12;  // Kích thước bàn cờ (12 x 12)
 
 // Số quân liên tiếp tối thiểu để thắng
@@ -52,9 +51,10 @@ struct Player
 {
     string name;
     CharacterType character;
-    int health = MAX_HEALTH;
-    int maxHealth = MAX_HEALTH;
-    int sorcererStacks = 0;
+    int health = 0;
+    int maxHealth = 0;
+    int baseDamage = 0;        // Sát thương cơ bản (có thể thay đổi, VD: Assassin)
+    int sorcererStacks = 0;    // Số stack poison của Sorcerer đang chịu
 };
 
 struct RoundState
@@ -134,3 +134,4 @@ bool isValidNameChar(int key);
 string trimWhitespace(const string& str);
 
 int getBaseHealth(CharacterType type);
+int getBaseDamage(CharacterType type);

@@ -2,19 +2,6 @@
 #include <cstdlib>
 
 
-// ============================================================
-// Hằng số nội bộ cho executeAttack
-// ============================================================
-
-static constexpr int ASSASSIN_BASE_DAMAGE       = 120;
-static constexpr int ASSASSIN_DAMAGE_PER_TURN   = 5;
-
-static constexpr int BRUISER_DAMAGE             = 70;
-
-static constexpr int VAMPIRE_DAMAGE             = 100;
-
-static constexpr int SORCERER_DAMAGE            = 50;
-
 int getBaseHealth(CharacterType type)
 {
     switch (type)
@@ -23,7 +10,19 @@ int getBaseHealth(CharacterType type)
     case BRUISER:  return 1600;
     case VAMPIRE:  return 800;
     case SORCERER: return 750;
-    default:       return 100;
+    default:       return 800;
+    }
+}
+
+int getBaseDamage(CharacterType type)
+{
+    switch (type)
+    {
+    case ASSASSIN: return 120;
+    case BRUISER:  return 70;
+    case VAMPIRE:  return 100;
+    case SORCERER: return 50;
+    default:       return 50;
     }
 }
 
@@ -40,13 +39,16 @@ void initMatch(MatchState& matchState,
     matchState.playerX = playerX;
     matchState.playerO = playerO;
 
-    matchState.playerX.maxHealth = getBaseHealth(matchState.playerX.character);
-    matchState.playerX.health    = matchState.playerX.maxHealth;
-    matchState.playerX.sorcererStacks = 0;
+    matchState.playerX.maxHealth       = getBaseHealth(matchState.playerX.character);
+    matchState.playerX.health          = matchState.playerX.maxHealth;
+    matchState.playerX.baseDamage      = getBaseDamage(matchState.playerX.character);
+    matchState.playerX.sorcererStacks  = 0;
 
-    matchState.playerO.maxHealth = getBaseHealth(matchState.playerO.character);
-    matchState.playerO.health    = matchState.playerO.maxHealth;
-    matchState.playerO.sorcererStacks = 0;
+    matchState.playerO.maxHealth       = getBaseHealth(matchState.playerO.character);
+    matchState.playerO.health          = matchState.playerO.maxHealth;
+    matchState.playerO.baseDamage      = getBaseDamage(matchState.playerO.character);
+    matchState.playerO.sorcererStacks  = 0;
+
     matchState.countRoundsPlayed = 0;
     matchState.matchResult       = ONGOING;
 
@@ -170,39 +172,45 @@ RoundResult checkRoundResult(RoundState& roundState, int lastMoveX, int lastMove
 
 void executeAttack(Player& attacker, Player& defender, int turnCount)
 {
-    int damage     = 0;
+    int damage = attacker.baseDamage;
+
     switch (attacker.character)
     {
     case ASSASSIN:
-        damage = ASSASSIN_BASE_DAMAGE + (turnCount / 2) * ASSASSIN_DAMAGE_PER_TURN;
+        // baseDamage đã được cộng dồn qua mỗi cặp lượt bởi controller
+        // Sau khi tấn công, reset về giá trị gốc
         break;
 
     case BRUISER:
-        damage = BRUISER_DAMAGE;
         break;
 
     case VAMPIRE:
-        damage = VAMPIRE_DAMAGE;
         {
-            int heal = damage * 0.3f;
+            // Heal 30% dame gây ra (trước khi tính reflect)
+            int heal = (int)(damage * 0.3f);
             attacker.health = std::min(attacker.health + heal, attacker.maxHealth);
         }
         break;
-        
+
     case SORCERER:
-        damage = SORCERER_DAMAGE;
         defender.sorcererStacks++;
         break;
     }
 
-    // BRUISER reflect damage
+    // BRUISER reflect: phản lại 25% dame nhận vào
     if (defender.character == BRUISER)
     {
-        int reflectDamage = damage * 0.25f;
+        int reflectDamage = (int)(damage * 0.25f);
         attacker.health = std::max(attacker.health - reflectDamage, 0);
     }
 
     defender.health = std::max(defender.health - damage, 0);
+
+    // Assassin: reset damage về giá trị gốc sau khi đã tấn công
+    if (attacker.character == ASSASSIN)
+    {
+        attacker.baseDamage = getBaseDamage(ASSASSIN);
+    }
 }
 
 RoundResult checkMatchResult(const MatchState& matchState)
