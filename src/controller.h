@@ -10,6 +10,7 @@ enum GameScreen
     MAIN_MENU,                // Màn hình menu chính
     MODE_SELECTION,           // Chọn chế độ: PVP hoặc PVE
     BOT_DIFFICULTY_SELECTION, // Chọn độ khó bot (chỉ xuất hiện ở PVE)
+    NAME_INPUT,               // Màn hình nhập tên người chơi (trước khi chọn nhân vật)
     CHARACTER_SELECTION,      // Mỗi người chọn nhân vật lần lượt (X trước, O sau)
     GAME_INTRO,               // Animation camera bay vào trước khi bắt đầu ván đấu
     GAME_BOARD,               // Màn hình chơi cờ chính
@@ -49,7 +50,15 @@ struct UIState
     float introCamX = 0.0f;      // Vị trí camera theo trục X cho animation intro
 
     // --- Undo/Redo ---
-    std::vector<Move> moveHistory; // Lịch sử các nước đi trong round hiện tại
+    std::vector<MoveRecord> moveHistory; // Complete history of all moves with undo status
+    std::vector<MoveRecord> undoStack;   // Moves that can be undone
+    std::vector<MoveRecord> redoStack;   // Moves that can be redone
+
+    // --- Name input ---
+    std::string nameInputBuffer; // Current text being entered on name input screen
+    bool isEnteringPlayerXName;  // true = entering X's name, false = entering O's name
+    std::string playerXName;     // Stored name for Player X
+    std::string playerOName;     // Stored name for Player O
 
     // --- Save naming ---
     std::string saveNameInput;  // Tên người dùng nhập khi lưu game
@@ -71,12 +80,13 @@ struct UIState
     float displayHealthO = (float)MAX_HEALTH; // HP hiển thị (nội suy mượt) của O
 
     // --- Floating damage/heal text ---
-    struct FloatingText {
+    struct FloatingText
+    {
         std::string text;
         Color color;
-        float x, y;        // vị trí hiển thị (screen coords)
-        float timer;        // thời gian còn lại
-        float maxTimer;     // thời gian tổng
+        float x, y;     // vị trí hiển thị (screen coords)
+        float timer;    // thời gian còn lại
+        float maxTimer; // thời gian tổng
     };
     std::vector<FloatingText> floatingTexts;
 };
@@ -95,6 +105,10 @@ void startGameIntro(UIState &ui);
 // x = hàng (row), y = cột (col) — tương ứng với board[x][y] trong model.
 void processMoveAndResult(MatchState &match, UIState &ui, int x, int y);
 
+// Undo/Redo functions
+void undoMove(MatchState &match, UIState &ui);
+void redoMove(MatchState &match, UIState &ui);
+
 // Gọi mỗi frame
 void handleInput(MatchState &match, UIState &ui);
 // Menu chính
@@ -105,6 +119,8 @@ void handleModeSelectionInput(UIState &ui);
 void handleBotDifficultyInput(UIState &ui);
 // Chọn nhân vật
 void handleCharSelectionInput(MatchState &match, UIState &ui);
+// Nhập tên người chơi
+void handleNameInputScreen(MatchState &match, UIState &ui);
 // Intro animation
 void handleGameIntroInput(MatchState &match, UIState &ui);
 // Gameplay

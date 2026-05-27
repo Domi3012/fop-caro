@@ -74,13 +74,22 @@ namespace
 }
 
 // Lưu trạng thái hiện tại của game xuống file
-bool saveGame(const MatchState &match, const std::vector<Move> &moveHistory, const std::string &filename)
+bool saveGame(const MatchState &match,
+              const std::vector<MoveRecord> &moveHistory,
+              const std::vector<MoveRecord> &undoStack,
+              const std::vector<MoveRecord> &redoStack,
+              const std::string &filename)
 {
     ensureSaveDirectoryExists();
 
     std::ofstream out("saves/" + filename);
     if (!out.is_open())
         return false;
+
+    // NAMES section
+    out << "NAMES\n";
+    out << (match.playerX.name.empty() ? "Player X" : match.playerX.name) << "\n";
+    out << (match.playerO.name.empty() ? "Player O" : match.playerO.name) << "\n";
 
     savePlayer(out, match.playerX, "Player 1");
     savePlayer(out, match.playerO, "Player 2");
@@ -89,11 +98,34 @@ bool saveGame(const MatchState &match, const std::vector<Move> &moveHistory, con
 
     out << match.countRoundsPlayed << " " << static_cast<int>(match.matchResult) << "\n";
 
-    // Lưu lịch sử nước đi
+    // MOVE_HISTORY section
+    out << "MOVE_HISTORY\n";
     out << moveHistory.size() << "\n";
     for (const auto &m : moveHistory)
     {
-        out << m.x << " " << m.y << " " << static_cast<int>(m.type) << "\n";
+        out << m.row << " " << m.col << " "
+            << static_cast<int>(m.player) << " "
+            << (m.isUndone ? 1 : 0) << "\n";
+    }
+
+    // UNDO_STACK section
+    out << "UNDO_STACK\n";
+    out << undoStack.size() << "\n";
+    for (const auto &m : undoStack)
+    {
+        out << m.row << " " << m.col << " "
+            << static_cast<int>(m.player) << " "
+            << (m.isUndone ? 1 : 0) << "\n";
+    }
+
+    // REDO_STACK section
+    out << "REDO_STACK\n";
+    out << redoStack.size() << "\n";
+    for (const auto &m : redoStack)
+    {
+        out << m.row << " " << m.col << " "
+            << static_cast<int>(m.player) << " "
+            << (m.isUndone ? 1 : 0) << "\n";
     }
 
     out.close();
@@ -101,32 +133,92 @@ bool saveGame(const MatchState &match, const std::vector<Move> &moveHistory, con
 }
 
 // Đọc file và nạp dữ liệu
-bool loadGame(MatchState &match, std::vector<Move> &moveHistory, const std::string &filename)
+bool loadGame(MatchState &match,
+              std::vector<MoveRecord> &moveHistory,
+              std::vector<MoveRecord> &undoStack,
+              std::vector<MoveRecord> &redoStack,
+              const std::string &filename)
 {
     std::ifstream in("saves/" + filename);
     if (!in.is_open())
         return false;
 
-    loadPlayer(in, match.playerX);
-    loadPlayer(in, match.playerO);
-
-    loadRound(in, match.currentRound);
-
-    int matchResult;
-    in >> match.countRoundsPlayed >> matchResult;
-    match.matchResult = static_cast<RoundResult>(matchResult);
-
-    // Đọc lịch sử nước đi
     moveHistory.clear();
-    int moveCount;
-    in >> moveCount;
-    for (int i = 0; i < moveCount; i++)
+    undoStack.clear();
+    redoStack.clear();
+
+    // Đọc token đầu tiên để xác định format
+    std::string firstToken;
+    in >> firstToken;
+
+    if (firstToken == "NAMES")
     {
-        Move m;
-        int typeInt;
-        in >> m.x >> m.y >> typeInt;
-        m.type = static_cast<PlayerType>(typeInt);
-        moveHistory.push_back(m);
+        // === FORMAT MỚI (có section markers) ===
+        std::getline(in >> std::ws, match.playerX.name);
+        std::getline(in >> std::ws, match.playerO.name);
+
+        loadPlayer(in, match.playerX);
+        loadPlayer(in, match.playerO);
+        loadRound(in, match.currentRound);
+
+        int matchResult;
+        in >> match.countRoundsPlayed >> matchResult;
+        match.matchResult = static_cast<RoundResult>(matchResult);
+
+        std::string section;
+        while (in >> section)
+        {
+            if (section == "MOVE_HISTORY" || section == "UNDO_STACK" || section == "REDO_STACK")
+            {
+                auto &target = (section == "MOVE_HISTORY") ? moveHistory
+                               : (section == "UNDO_STACK") ? undoStack
+                                                           : redoStack;
+                int count;
+                in >> count;
+                for (int i = 0; i < count; i++)
+                {
+                    MoveRecord m;
+                    int typeInt, undoneInt;
+                    in >> m.row >> m.col >> typeInt >> undoneInt;
+                    m.player = static_cast<PlayerType>(typeInt);
+                    m.isUndone = (undoneInt != 0);
+                    target.push_back(m);
+                }
+            }
+        }
+    }
+    else
+    {
+        // === FORMAT CŨ (không có NAMES section) ===
+        // firstToken là tên player X
+        match.playerX.name = firstToken;
+        int charType;
+        in >> charType >> match.playerX.health;
+        match.playerX.character = static_cast<CharacterType>(charType);
+
+        loadPlayer(in, match.playerO);
+
+        loadRound(in, match.currentRound);
+
+        int matchResult;
+        in >> match.countRoundsPlayed >> matchResult;
+        match.matchResult = static_cast<RoundResult>(matchResult);
+
+        // Đọc move history cũ (Move struct: x, y, type)
+        int moveCount;
+        if (in >> moveCount)
+        {
+            for (int i = 0; i < moveCount; i++)
+            {
+                MoveRecord m;
+                int typeInt;
+                in >> m.row >> m.col >> typeInt;
+                m.player = static_cast<PlayerType>(typeInt);
+                m.isUndone = false;
+                moveHistory.push_back(m);
+                undoStack.push_back(m);
+            }
+        }
     }
 
     in.close();

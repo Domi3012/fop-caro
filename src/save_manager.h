@@ -9,14 +9,24 @@
 // ========================================================
 
 // Lưu trạng thái hiện tại của game xuống file (VD: saves/MySave_20260415_120000.txt)
-// moveHistory: lịch sử các nước đi trong round hiện tại
+// moveHistory: lịch sử đầy đủ các nước đi với trạng thái undo
+// undoStack: stack các nước có thể undo
+// redoStack: stack các nước có thể redo
 // Trả về true nếu lưu thành công, false nếu lỗi (hết ổ cứng, sai quyền...)
-bool saveGame(const MatchState &match, const std::vector<Move> &moveHistory, const std::string &filename);
+bool saveGame(const MatchState &match,
+              const std::vector<MoveRecord> &moveHistory,
+              const std::vector<MoveRecord> &undoStack,
+              const std::vector<MoveRecord> &redoStack,
+              const std::string &filename);
 
 // Đọc file và nạp dữ liệu đè lên matchState hiện tại
-// moveHistory (output): lịch sử nước đi được nạp từ file
+// moveHistory, undoStack, redoStack (output): các stack được nạp từ file
 // Trả về true nếu đọc thành công, false nếu lỗi
-bool loadGame(MatchState &match, std::vector<Move> &moveHistory, const std::string &filename);
+bool loadGame(MatchState &match,
+              std::vector<MoveRecord> &moveHistory,
+              std::vector<MoveRecord> &undoStack,
+              std::vector<MoveRecord> &redoStack,
+              const std::string &filename);
 
 // ========================================================
 // Directory Management API

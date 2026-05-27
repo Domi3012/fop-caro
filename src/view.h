@@ -14,6 +14,7 @@ void renderGame(const MatchState &match, UIState &ui);
 void drawSettingsScreen(const UIState &ui);
 void drawLoadGameScreen(const UIState &ui, const std::vector<std::string> &saveFiles);
 void drawSaveGameScreen(const UIState &ui);
+void drawNameInputScreen(const UIState &ui);
 void drawModeSelectionScreen(const UIState &ui);
 void drawGameIntro(const MatchState &match, const UIState &ui);
 void drawCaroGame(const MatchState &match, UIState &ui);

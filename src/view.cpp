@@ -98,6 +98,10 @@ void renderGame(const MatchState &match, UIState &ui)
         drawSaveGameScreen(ui);
         break;
 
+    case NAME_INPUT:
+        drawNameInputScreen(ui);
+        break;
+
     case SETTINGS:
         drawSettingsScreen(ui);
         break;
@@ -117,9 +121,18 @@ void renderGame(const MatchState &match, UIState &ui)
         int screenW = GetScreenWidth();
         int screenH = GetScreenHeight();
         float fontSize = screenH * 0.1f;
-        // match.currentRound.result luon duoc set truoc khi chuyen sang ROUND_OVER
-        const char *msg = (match.currentRound.result == X_WINS) ? "X WINS THIS ROUND!" : (match.currentRound.result == O_WINS) ? "O WINS THIS ROUND!"
-                                                                                                                               : "DRAW!";
+
+        const char *xName = match.playerX.name.empty() ? "X" : match.playerX.name.c_str();
+        const char *oName = match.playerO.name.empty() ? "O" : match.playerO.name.c_str();
+
+        const char *msg;
+        if (match.currentRound.result == X_WINS)
+            msg = TextFormat("%s WINS THIS ROUND!", xName);
+        else if (match.currentRound.result == O_WINS)
+            msg = TextFormat("%s WINS THIS ROUND!", oName);
+        else
+            msg = "DRAW!";
+
         Vector2 measure = MeasureTextEx(font8bit, msg, fontSize, 0);
         DrawRectangle(0, screenH * 0.4f - 20, screenW, fontSize + 40, Fade(BLACK, 0.75f));
         DrawTextEx(font8bit, msg,
@@ -165,8 +178,6 @@ void unloadView()
 
     UnloadFont(font8bit);
 }
-
-
 
 static BoardLayout getBoardLayout(int screenW, int screenH)
 {
@@ -619,7 +630,8 @@ static void drawBoard(const MatchState &match, const UIState &ui)
 static void drawWinningHighlight(const MatchState &match, const BoardLayout &layout)
 {
     const auto &cells = match.currentRound.winningCells;
-    if (cells.empty()) return;
+    if (cells.empty())
+        return;
 
     // Nhấp nháy: sử dụng sin() để tạo hiệu ứng blink mượt
     float time = (float)GetTime();
@@ -650,7 +662,11 @@ static void drawTurnBanner(const MatchState &match)
 
     BoardLayout layout = getBoardLayout(screenW, screenH);
 
-    const char *turnText = (match.currentRound.toMove == X) ? "TURN: PLAYER X" : "TURN: PLAYER O";
+    const char *xName = match.playerX.name.empty() ? "PLAYER X" : match.playerX.name.c_str();
+    const char *oName = match.playerO.name.empty() ? "PLAYER O" : match.playerO.name.c_str();
+    const char *turnText = (match.currentRound.toMove == X)
+                               ? TextFormat("TURN: %s", xName)
+                               : TextFormat("TURN: %s", oName);
     Color turnColor = (match.currentRound.toMove == X) ? RED : BLUE;
 
     float fontSize = screenH * 0.04f;
@@ -683,9 +699,9 @@ static void drawPlayerPanel(const char *name, float displayHealth, int actualHea
 
     // Tính chiều cao tổng của panel dựa trên nội dung thực tế
     Vector2 nameSize = MeasureTextEx(font8bit, name, nameFontSize, 0);
-    float nameBlockH = nameSize.y;                     // chiều cao tên
-    float gap1 = 12.0f;                                 // khoảng cách tên -> thanh HP
-    float gap2 = 10.0f;                                 // khoảng cách thanh HP -> text HP
+    float nameBlockH = nameSize.y; // chiều cao tên
+    float gap1 = 12.0f;            // khoảng cách tên -> thanh HP
+    float gap2 = 10.0f;            // khoảng cách thanh HP -> text HP
     Vector2 hpTextSize = MeasureTextEx(font8bit, TextFormat("HP: %d/%d", actualHealth, MAX_HEALTH), hpFontSize, 0);
     float hpTextBlockH = hpTextSize.y;
 
@@ -717,7 +733,11 @@ static void drawPlayerPanel(const char *name, float displayHealth, int actualHea
 static void drawTurnIndicator(const MatchState &match, int screenW, int screenH)
 {
     float turnFontSize = screenH * 0.04f;
-    const char *turnText = (match.currentRound.toMove == X) ? "TURN: PLAYER X" : "TURN: PLAYER O";
+    const char *xName = match.playerX.name.empty() ? "PLAYER X" : match.playerX.name.c_str();
+    const char *oName = match.playerO.name.empty() ? "PLAYER O" : match.playerO.name.c_str();
+    const char *turnText = (match.currentRound.toMove == X)
+                               ? TextFormat("TURN: %s", xName)
+                               : TextFormat("TURN: %s", oName);
     Color turnColor = (match.currentRound.toMove == X) ? RED : BLUE;
 
     Vector2 turnSize = MeasureTextEx(font8bit, turnText, turnFontSize, 0);
@@ -750,17 +770,22 @@ static void drawStatusPanel(const MatchState &match, UIState &ui)
     ui.displayHealthO += (targetO - ui.displayHealthO) * lerpSpeed * dt;
 
     // Snap khi đủ gần
-    if (std::fabs(ui.displayHealthX - targetX) < 0.5f) ui.displayHealthX = targetX;
-    if (std::fabs(ui.displayHealthO - targetO) < 0.5f) ui.displayHealthO = targetO;
+    if (std::fabs(ui.displayHealthX - targetX) < 0.5f)
+        ui.displayHealthX = targetX;
+    if (std::fabs(ui.displayHealthO - targetO) < 0.5f)
+        ui.displayHealthO = targetO;
 
     float nameFontSize = screenH * 0.06f;
     float hpFontSize = screenH * 0.03f;
     float barW = screenW * 0.20f;
     float barH = screenH * 0.04f;
 
-    drawPlayerPanel("Player X", ui.displayHealthX, match.playerX.health, match.playerX.maxHealth, RED,
+    const char *xName = match.playerX.name.empty() ? "Player X" : match.playerX.name.c_str();
+    const char *oName = match.playerO.name.empty() ? "Player O" : match.playerO.name.c_str();
+
+    drawPlayerPanel(xName, ui.displayHealthX, match.playerX.health, RED,
                     screenW * 0.05f, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
-    drawPlayerPanel("Player O", ui.displayHealthO, match.playerO.health, match.playerO.maxHealth, BLUE,
+    drawPlayerPanel(oName, ui.displayHealthO, match.playerO.health, BLUE,
                     screenW * 0.95f - barW, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
 
     drawTurnIndicator(match, screenW, screenH);
@@ -819,10 +844,16 @@ void drawGameOver(const MatchState &match, const UIState &ui)
     drawParallaxBackground(0.0f); // Lock background
     drawCharacters(0.0f);
 
+    const char *xName = match.playerX.name.empty() ? "X" : match.playerX.name.c_str();
+    const char *oName = match.playerO.name.empty() ? "O" : match.playerO.name.c_str();
+
     Vector2 measure = MeasureTextEx(font8bit, "GAME OVER", 0.25f * screenH, 0.0);
-    Vector2 measureStat = MeasureTextEx(font8bit, "X WINS", 0.15f * screenH, 0.0f);
+    const char *winMsg = (match.matchResult == X_WINS)
+                             ? TextFormat("%s WINS", xName)
+                             : TextFormat("%s WINS", oName);
+    Vector2 measureStat = MeasureTextEx(font8bit, winMsg, 0.15f * screenH, 0.0f);
     DrawTextEx(font8bit, "GAME OVER", {screenW / 2 - measure.x / 2, screenH * 0.4f - measure.y / 2}, 0.25f * screenH, 0.0, buttonYellow);
-    DrawTextEx(font8bit, (match.matchResult == X_WINS) ? "X WINS" : "O WINS",
+    DrawTextEx(font8bit, winMsg,
                {screenW / 2 - measureStat.x / 2, screenH * 0.4f + measure.y / 2}, 0.15f * screenH, 0.0, BLACK);
 }
 
@@ -1081,6 +1112,69 @@ void drawSaveGameScreen(const UIState &ui)
     Vector2 footerMeasure = MeasureTextEx(font8bit, footer, footerSize, 1.0f);
     DrawTextEx(font8bit, footer,
                {screenW / 2.0f - footerMeasure.x / 2.0f, panelY + panelH - footerMeasure.y - 20.0f},
+               footerSize, 1.0f, Fade(WHITE, 0.5f));
+}
+
+void drawNameInputScreen(const UIState &ui)
+{
+    drawParallaxBackground(1.0f);
+
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    // Panel
+    float panelW = screenW * 0.50f;
+    float panelH = screenH * 0.40f;
+    float panelX = (screenW - panelW) / 2.0f;
+    float panelY = (screenH - panelH) / 2.0f;
+
+    DrawRectangle(panelX, panelY, panelW, panelH, Fade(BLACK, 0.75f));
+    DrawRectangleLinesEx({panelX, panelY, panelW, panelH}, 4, buttonYellow);
+
+    // Tiêu đề
+    const char *title = ui.isEnteringPlayerXName ? "ENTER PLAYER X NAME" : "ENTER PLAYER O NAME";
+    float titleSize = screenH * 0.06f;
+    Vector2 titleMeasure = MeasureTextEx(font8bit, title, titleSize, 2.0f);
+    Color titleColor = ui.isEnteringPlayerXName ? RED : BLUE;
+    DrawTextEx(font8bit, title,
+               {screenW / 2.0f - titleMeasure.x / 2.0f, panelY + panelH * 0.08f},
+               titleSize, 2.0f, titleColor);
+
+    // Hint
+    const char *hint = ui.isPVE ? "Enter your name (or press ENTER for default):"
+                                : "Enter name (letters, numbers, spaces, - and '):";
+    float hintSize = screenH * 0.026f;
+    Vector2 hintMeasure = MeasureTextEx(font8bit, hint, hintSize, 1.0f);
+    DrawTextEx(font8bit, hint,
+               {screenW / 2.0f - hintMeasure.x / 2.0f, panelY + panelH * 0.26f},
+               hintSize, 1.0f, Fade(WHITE, 0.7f));
+
+    // Ô nhập
+    float inputBoxW = panelW * 0.75f;
+    float inputBoxH = screenH * 0.055f;
+    float inputBoxX = screenW / 2.0f - inputBoxW / 2.0f;
+    float inputBoxY = panelY + panelH * 0.42f;
+
+    DrawRectangle((int)inputBoxX, (int)inputBoxY, (int)inputBoxW, (int)inputBoxH, Fade(WHITE, 0.1f));
+    DrawRectangleLinesEx({inputBoxX, inputBoxY, inputBoxW, inputBoxH}, 3, buttonYellow);
+
+    // Hiển thị text + con trỏ
+    float inputFontSize = inputBoxH * 0.55f;
+    std::string displayText = ui.nameInputBuffer;
+    if (((int)(GetTime() * 2.0f) % 2 == 0) && displayText.size() < 20)
+        displayText += "_";
+
+    Vector2 inputMeasure = MeasureTextEx(font8bit, displayText.c_str(), inputFontSize, 1.0f);
+    DrawTextEx(font8bit, displayText.c_str(),
+               {inputBoxX + 12.0f, inputBoxY + (inputBoxH - inputMeasure.y) / 2.0f},
+               inputFontSize, 1.0f, RAYWHITE);
+
+    // Footer
+    const char *footer = "ENTER: Confirm  |  ESC: Back to Menu";
+    float footerSize = screenH * 0.024f;
+    Vector2 footerMeasure = MeasureTextEx(font8bit, footer, footerSize, 1.0f);
+    DrawTextEx(font8bit, footer,
+               {screenW / 2.0f - footerMeasure.x / 2.0f, panelY + panelH - footerMeasure.y - 16.0f},
                footerSize, 1.0f, Fade(WHITE, 0.5f));
 }
 

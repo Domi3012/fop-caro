@@ -1,8 +1,11 @@
-Player 1
-1 100
-Player 2
+NAMES
+QuangPhat
+BaoLon
+QuangPhat
 1 40
-1 0 0
+BaoLon
+1 40
+0 0 0
 2 2 2 2 2 2 2 2 2 2 2 2 
 2 2 2 2 2 2 2 2 2 2 2 2 
 2 2 2 2 2 2 2 2 2 2 2 2 
@@ -15,4 +18,10 @@ Player 2
 2 2 2 2 2 2 2 2 2 2 2 2 
 2 2 2 2 2 2 2 2 2 2 2 2 
 2 2 2 2 2 2 2 2 2 2 2 2 
-1 0
+2 0
+MOVE_HISTORY
+0
+UNDO_STACK
+0
+REDO_STACK
+0
