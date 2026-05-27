@@ -30,7 +30,8 @@ enum CharacterType
 {
     ASSASSIN,
     BRUISER,
-    VAMPIRE
+    VAMPIRE,
+    SORCERER
 };
 enum RoundResult
 {
@@ -49,6 +50,8 @@ struct Player
     string name;
     CharacterType character;
     int health = MAX_HEALTH;
+    int maxHealth = MAX_HEALTH;
+    int sorcererStacks = 0;
 };
 
 struct RoundState
@@ -106,3 +109,4 @@ void makeMove(RoundState &roundState, int x, int y);
 RoundResult checkRoundResult(RoundState &roundState, int lastMoveX, int lastMoveY);
 void executeAttack(Player &attacker, Player &defender, int turnCount);
 RoundResult checkMatchResult(const MatchState &matchState);
+int getBaseHealth(CharacterType type);
