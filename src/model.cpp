@@ -2,19 +2,30 @@
 #include <cstdlib>
 
 
-// ============================================================
-// Hằng số nội bộ cho executeAttack
-// ============================================================
+int getBaseHealth(CharacterType type)
+{
+    switch (type)
+    {
+    case ASSASSIN: return 650;
+    case BRUISER:  return 1600;
+    case VAMPIRE:  return 800;
+    case SORCERER: return 750;
+    default:       return 800;
+    }
+}
 
-static constexpr int ASSASSIN_EARLY_DAMAGE      = 35;
-static constexpr int ASSASSIN_MID_DAMAGE_BASE   = 60;
-static constexpr int ASSASSIN_MID_DAMAGE_BONUS  = 20;
+int getBaseDamage(CharacterType type)
+{
+    switch (type)
+    {
+    case ASSASSIN: return 120;
+    case BRUISER:  return 70;
+    case VAMPIRE:  return 100;
+    case SORCERER: return 50;
+    default:       return 50;
+    }
+}
 
-static constexpr int BRUISER_DAMAGE             = 60;
-
-static constexpr int VAMPIRE_DAMAGE             = 50;
-static constexpr int VAMPIRE_HEAL_BASE          = 15;
-static constexpr int VAMPIRE_HEAL_RANDOM        = 11; // rand() % VAMPIRE_HEAL_RANDOM
 
 
 // ============================================================
@@ -28,8 +39,16 @@ void initMatch(MatchState& matchState,
     matchState.playerX = playerX;
     matchState.playerO = playerO;
 
-    matchState.playerX.health    = MAX_HEALTH;
-    matchState.playerO.health    = MAX_HEALTH;
+    matchState.playerX.maxHealth       = getBaseHealth(matchState.playerX.character);
+    matchState.playerX.health          = matchState.playerX.maxHealth;
+    matchState.playerX.baseDamage      = getBaseDamage(matchState.playerX.character);
+    matchState.playerX.sorcererStacks  = 0;
+
+    matchState.playerO.maxHealth       = getBaseHealth(matchState.playerO.character);
+    matchState.playerO.health          = matchState.playerO.maxHealth;
+    matchState.playerO.baseDamage      = getBaseDamage(matchState.playerO.character);
+    matchState.playerO.sorcererStacks  = 0;
+
     matchState.countRoundsPlayed = 0;
     matchState.matchResult       = ONGOING;
 
@@ -40,6 +59,7 @@ void initRound(RoundState& roundState, int roundCount)
 {
     roundState.turnCount = 0;
     roundState.result    = ONGOING;
+    roundState.winningCells.clear();
 
     // Khởi tạo bàn cờ trống BOARD_SIZE x BOARD_SIZE
     roundState.board.assign(BOARD_SIZE,
@@ -104,7 +124,7 @@ static int countDir(const vector<vector<PlayerType>>& board,
     return count;
 }
 
-RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int lastMoveY)
+RoundResult checkRoundResult(RoundState& roundState, int lastMoveX, int lastMoveY)
 {
     PlayerType player = roundState.board[lastMoveX][lastMoveY];
     if (player == NONE)
@@ -115,13 +135,33 @@ RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int la
 
     for (auto& d : dirs)
     {
-        // +1 cho ô vừa đặt
-        int total = 1 + countDir(roundState.board,
-                                  lastMoveX, lastMoveY,
-                                  d[0], d[1],
-                                  player);
-        if (total >= WIN_LENGTH)
+        // Thu thập các ô liên tiếp theo hướng (dx, dy) và ngược lại
+        vector<std::pair<int,int>> cells;
+        cells.push_back({lastMoveX, lastMoveY});
+
+        // Chiều thuận
+        for (int nx = lastMoveX + d[0], ny = lastMoveY + d[1];
+             nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE
+             && roundState.board[nx][ny] == player;
+             nx += d[0], ny += d[1])
+        {
+            cells.push_back({nx, ny});
+        }
+
+        // Chiều ngược
+        for (int nx = lastMoveX - d[0], ny = lastMoveY - d[1];
+             nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE
+             && roundState.board[nx][ny] == player;
+             nx -= d[0], ny -= d[1])
+        {
+            cells.push_back({nx, ny});
+        }
+
+        if ((int)cells.size() >= WIN_LENGTH)
+        {
+            roundState.winningCells = cells;
             return (player == X) ? X_WINS : O_WINS;
+        }
     }
 
     if (roundState.turnCount == BOARD_SIZE * BOARD_SIZE)
@@ -132,41 +172,45 @@ RoundResult checkRoundResult(const RoundState& roundState, int lastMoveX, int la
 
 void executeAttack(Player& attacker, Player& defender, int turnCount)
 {
-    int damage     = 0;
-    int boardTotal = BOARD_SIZE * BOARD_SIZE;
-
-    // Mốc early/mid/late game theo tỉ lệ số ô
-    int earlyEnd = boardTotal / 5;
-    int midEnd   = (boardTotal * 3) / 5;
+    int damage = attacker.baseDamage;
 
     switch (attacker.character)
     {
     case ASSASSIN:
-        if (turnCount > midEnd)
-            damage = defender.health;                          // Kết liễu (late game)
-        else if (turnCount > earlyEnd)
-            damage = ASSASSIN_MID_DAMAGE_BASE
-                   + (turnCount - earlyEnd)
-                   * ASSASSIN_MID_DAMAGE_BONUS
-                   / (midEnd - earlyEnd);                      // Scale tuyến tính (mid game)
-        else
-            damage = ASSASSIN_EARLY_DAMAGE;                    // Cố định (early game)
+        // baseDamage đã được cộng dồn qua mỗi cặp lượt bởi controller
+        // Sau khi tấn công, reset về giá trị gốc
         break;
 
     case BRUISER:
-        damage = BRUISER_DAMAGE;
         break;
 
     case VAMPIRE:
-        damage = VAMPIRE_DAMAGE;
         {
-            int heal = VAMPIRE_HEAL_BASE + rand() % VAMPIRE_HEAL_RANDOM;
-            attacker.health = std::min(attacker.health + heal, MAX_HEALTH);
+            // Heal 30% dame gây ra (trước khi tính reflect)
+            int heal = (int)(damage * 0.3f);
+            attacker.health = std::min(attacker.health + heal, attacker.maxHealth);
         }
+        break;
+
+    case SORCERER:
+        defender.sorcererStacks++;
         break;
     }
 
+    // BRUISER reflect: phản lại 25% dame nhận vào
+    if (defender.character == BRUISER)
+    {
+        int reflectDamage = (int)(damage * 0.25f);
+        attacker.health = std::max(attacker.health - reflectDamage, 0);
+    }
+
     defender.health = std::max(defender.health - damage, 0);
+
+    // Assassin: reset damage về giá trị gốc sau khi đã tấn công
+    if (attacker.character == ASSASSIN)
+    {
+        attacker.baseDamage = getBaseDamage(ASSASSIN);
+    }
 }
 
 RoundResult checkMatchResult(const MatchState& matchState)
@@ -196,3 +240,46 @@ const ResolutionOption RESOLUTIONS[] =
 };
 
 const int RESOLUTION_COUNT = sizeof(RESOLUTIONS) / sizeof(RESOLUTIONS[0]);
+
+
+// ============================================================
+// Hàm xử lý tên người chơi
+// ============================================================
+
+bool isValidNameChar(int key)
+{
+    // Alphabetic: A-Z, a-z
+    if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z'))
+        return true;
+    
+    // Numeric: 0-9
+    if (key >= '0' && key <= '9')
+        return true;
+    
+    // Space
+    if (key == ' ')
+        return true;
+    
+    // Hyphen and apostrophe
+    if (key == '-' || key == '\'')
+        return true;
+    
+    // Vietnamese Unicode characters
+    // Unicode range for Vietnamese characters with diacritics
+    // Covers: À-ỹ (U+00C0 to U+1EF9)
+    if (key >= 0x00C0 && key <= 0x1EF9)
+        return true;
+    
+    return false;
+}
+
+string trimWhitespace(const string& str)
+{
+    size_t start = str.find_first_not_of(" \t\n\r");
+    size_t end = str.find_last_not_of(" \t\n\r");
+    
+    if (start == string::npos)
+        return "";
+    
+    return str.substr(start, end - start + 1);
+}

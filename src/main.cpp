@@ -3,6 +3,7 @@
 #include "controller.h"
 #include "view.h"
 #include "audio_manager.h"
+#include "sprite_manager.h"
 
 int main()
 {
@@ -11,6 +12,7 @@ int main()
     InitWindow(0, 0, "RGBCaro - The RPG Caro Game");  // 0,0 = auto-fit monitor
     initAudio();
     initView();
+    initSpriteManager();
     SetTargetFPS(60);
 
     MatchState match;
@@ -33,6 +35,7 @@ int main()
     }
 
     // --- Cleanup ---
+    unloadSpriteManager();
     unloadView();
     unloadAudio();
     CloseWindow();

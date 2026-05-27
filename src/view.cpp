@@ -5,7 +5,9 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <cctype>
 #include "audio_manager.h"
+#include "sprite_manager.h"
 
 using std::string;
 using std::vector;
@@ -46,22 +48,33 @@ struct ParallaxLayer
 
 static ParallaxLayer forestLayers[FOREST_LAYER_COUNT];
 
+struct BoardLayout
+{
+    float boardPixelSize;
+    float cellSize;
+    float startX;
+    float startY;
+};
+
 // Forward declarations — internal only
 static void drawParallaxBackground(float speedMultiplier = 1.0f);
 static void drawMenu(const UIState &ui);
 static void drawMenuButton(const UIState &ui);
 static void drawBoard(const MatchState &match, const UIState &ui);
-static void drawStatusPanel(const MatchState &match);
+static void drawStatusPanel(const MatchState &match, UIState &ui);
 static void drawTurnBanner(const MatchState &match);
-static void drawCharacters(float shiftX);
+static void drawCharacters(const MatchState &match, float shiftX);
 static void drawPauseOverlay(const UIState &ui);
-static void drawPlayerPanel(const char* name, int health, Color accent,
+static void drawPlayerPanel(const char *name, float displayHealth, int actualHealth, int maxHealth,
+                            Color accent,
                             float x, float y, float barW, float barH,
                             float nameFontSize, float hpFontSize);
 static void drawTurnIndicator(const MatchState &match, int screenW, int screenH);
+static void drawFloatingTexts(UIState &ui);
+static void drawWinningHighlight(const MatchState &match, const BoardLayout &layout);
 
 // --- HAM RENDER TONG ---
-void renderGame(const MatchState &match, const UIState &ui)
+void renderGame(const MatchState &match, UIState &ui)
 {
     ClearBackground(BLACK);
     switch (ui.currentScreen)
@@ -80,6 +93,14 @@ void renderGame(const MatchState &match, const UIState &ui)
 
     case LOAD_GAME:
         drawLoadGameScreen(ui, getSaveFilesList());
+        break;
+
+    case SAVE_GAME:
+        drawSaveGameScreen(ui);
+        break;
+
+    case NAME_INPUT:
+        drawNameInputScreen(ui);
         break;
 
     case SETTINGS:
@@ -101,9 +122,18 @@ void renderGame(const MatchState &match, const UIState &ui)
         int screenW = GetScreenWidth();
         int screenH = GetScreenHeight();
         float fontSize = screenH * 0.1f;
-        // match.currentRound.result luon duoc set truoc khi chuyen sang ROUND_OVER
-        const char *msg = (match.currentRound.result == X_WINS) ? "X WINS THIS ROUND!" : (match.currentRound.result == O_WINS) ? "O WINS THIS ROUND!"
-                                                                                                                               : "DRAW!";
+
+        const char *xName = match.playerX.name.empty() ? "X" : match.playerX.name.c_str();
+        const char *oName = match.playerO.name.empty() ? "O" : match.playerO.name.c_str();
+
+        const char *msg;
+        if (match.currentRound.result == X_WINS)
+            msg = TextFormat("%s WINS THIS ROUND!", xName);
+        else if (match.currentRound.result == O_WINS)
+            msg = TextFormat("%s WINS THIS ROUND!", oName);
+        else
+            msg = "DRAW!";
+
         Vector2 measure = MeasureTextEx(font8bit, msg, fontSize, 0);
         DrawRectangle(0, screenH * 0.4f - 20, screenW, fontSize + 40, Fade(BLACK, 0.75f));
         DrawTextEx(font8bit, msg,
@@ -150,14 +180,6 @@ void unloadView()
     UnloadFont(font8bit);
 }
 
-struct BoardLayout
-{
-    float boardPixelSize;
-    float cellSize;
-    float startX;
-    float startY;
-};
-
 static BoardLayout getBoardLayout(int screenW, int screenH)
 {
     // Chừa chỗ cho panel trái/phải + turn banner phía trên
@@ -177,27 +199,35 @@ static BoardLayout getBoardLayout(int screenW, int screenH)
     return {boardPixelSize, cellSize, startX, startY};
 }
 
-static void drawCharacters(float shiftX)
+static void drawCharacters(const MatchState &match, float shiftX)
 {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    // Ve placeholder hinh chu nhat
-    float charW = screenW * 0.08f;
-    float charH = screenH * 0.20f;
+    // Ground platform at 95% screen height
+    float baseGroundY = screenH * 0.95f;
 
-    float baseGroundY = screenH * 0.85f; // Platform khoang 85% manh hinh
+    // Sprite height is 20% of screen height
+    float spriteH = screenH * 0.20f;
+    float scale = spriteH / 64.0f;
+    float spriteW = 64.0f * scale;
 
-    float posX_X = screenW * 0.15f + shiftX - charW / 2.0f;
-    float posX_O = screenW * 0.85f + shiftX - charW / 2.0f;
+    float posX_X = screenW * 0.15f + shiftX - spriteW / 2.0f;
+    float posX_O = screenW * 0.85f + shiftX - spriteW / 2.0f;
 
-    DrawRectangle(posX_X, baseGroundY - charH, charW, charH, Fade(RED, 0.8f));
-    DrawRectangleLinesEx({posX_X, baseGroundY - charH, charW, charH}, 3, WHITE);
-    DrawTextEx(font8bit, "X", {posX_X + charW / 2.0f - 15, baseGroundY - charH / 2.0f - 20}, 40, 2, WHITE);
+    // Retrieve and update animations
+    CharacterSprite &csX = getCharacterSprite(match.playerX.character);
+    CharacterSprite &csO = getCharacterSprite(match.playerO.character);
 
-    DrawRectangle(posX_O, baseGroundY - charH, charW, charH, Fade(BLUE, 0.8f));
-    DrawRectangleLinesEx({posX_O, baseGroundY - charH, charW, charH}, 3, WHITE);
-    DrawTextEx(font8bit, "O", {posX_O + charW / 2.0f - 15, baseGroundY - charH / 2.0f - 20}, 40, 2, WHITE);
+    // If game is active or intro is running, update the idle/active animations
+    updateCharacterAnimation(csX, GetFrameTime());
+    updateCharacterAnimation(csO, GetFrameTime());
+
+    // Draw Player X (facing right)
+    drawCharacterSprite(csX, posX_X, baseGroundY - spriteH, scale, false);
+
+    // Draw Player O (facing left - flipped)
+    drawCharacterSprite(csO, posX_O, baseGroundY - spriteH, scale, true);
 }
 
 // --- PARALLAX BACKGROUND ---
@@ -403,60 +433,158 @@ void drawCharSelection(const UIState &ui)
         headerText = "PLAYER O IS CHOOSING";
         headerColor = BLUE;
     }
-    float headerFontSize = screenH * 0.08f;
+    float headerFontSize = screenH * 0.05f; // Slightly smaller to look more balanced
     Vector2 headerSize = MeasureTextEx(font8bit, headerText, headerFontSize, 2);
-    DrawTextEx(font8bit, headerText, {screenW / 2.0f - headerSize.x / 2.0f, panelY + screenH * 0.05f}, headerFontSize, 2, headerColor);
+    DrawTextEx(font8bit, headerText, {screenW / 2.0f - headerSize.x / 2.0f, panelY + screenH * 0.03f}, headerFontSize, 2, headerColor);
 
-    // Character Box Placeholder
-    float boxW = panelW * 0.3f;
-    float boxH = panelH * 0.4f;
-    float boxX = screenW / 2.0f - boxW / 2.0f;
-    float boxY = panelY + screenH * 0.18f;
+    // === REDESIGNED SPLIT PANEL LAYOUT ===
+    float contentY = panelY + screenH * 0.10f;
+    float contentH = panelH - screenH * 0.22f;
+    float contentW = panelW - screenW * 0.06f;
+    float contentX = panelX + screenW * 0.03f;
 
+    // 1. Left Box: Character Preview (Animated Sprite)
+    float leftW = contentW * 0.40f;
+    float leftH = contentH;
+    float leftX = contentX;
+    float leftY = contentY;
+
+    // 2. Right Column
+    float rightW = contentW * 0.55f;
+    float rightX = contentX + leftW + contentW * 0.05f;
+    float rightY = contentY;
+
+    float nameBoxH = leftH * 0.20f;
+    float statsBoxH = leftH * 0.75f;
+    float statsBoxY = rightY + nameBoxH + leftH * 0.05f;
+
+    // Determine current character details based on menu index
     Color charColor;
     const char *charName;
-    const char *charDesc;
+    int baseHp = 0;
+    int baseDmg = 0;
+    CharacterType currentType = ASSASSIN;
 
     switch (ui.characterMenuIndex)
     {
     case 1:
         charName = "ASSASSIN";
-        charColor = Fade(PURPLE, 0.8f);
-        charDesc = "Skill: DMG increases significantly as the round goes on";
+        charColor = PURPLE;
+        baseHp = 650;
+        baseDmg = 120;
+        currentType = ASSASSIN;
         break;
     case 2:
         charName = "BRUISER";
-        charColor = Fade(ORANGE, 0.8f);
-        charDesc = "Skill: DMG is always a moderately high constant";
+        charColor = ORANGE;
+        baseHp = 1600;
+        baseDmg = 70;
+        currentType = BRUISER;
         break;
     case 3:
-    default:
         charName = "VAMPIRE";
-        charColor = Fade(DARKGREEN, 0.8f);
-        charDesc = "Skill: Heals a small, random amount of HP when attack";
+        charColor = DARKGREEN;
+        baseHp = 800;
+        baseDmg = 100;
+        currentType = VAMPIRE;
+        break;
+    case 4:
+    default:
+        charName = "SORCERER";
+        charColor = SKYBLUE;
+        baseHp = 750;
+        baseDmg = 50;
+        currentType = SORCERER;
         break;
     }
 
-    // Draw box
-    DrawRectangle(boxX, boxY, boxW, boxH, charColor);
-    DrawRectangleLinesEx({boxX, boxY, boxW, boxH}, 5, WHITE); // Khung net dut
-    DrawTextEx(font8bit, "?", {boxX + boxW / 2.0f - 20, boxY + boxH / 2.0f - 40}, 80, 2, Fade(WHITE, 0.5f));
+    // --- LEFT COLUMN: Sprite Preview ---
+    DrawRectangle(leftX, leftY, leftW, leftH, Fade(charColor, 0.12f));
+    DrawRectangleLinesEx({leftX, leftY, leftW, leftH}, 3, charColor);
 
-    // Char Name
-    float nameFontSize = screenH * 0.05f;
+    // Get and update animation
+    CharacterSprite &cs = getCharacterSprite(currentType);
+    setAnimation(cs, ANIM_IDLE);
+    updateCharacterAnimation(cs, GetFrameTime());
+
+    // Scale sprite relative to panel height (so it's resolution-independent!)
+    float spriteSize = leftH * 0.65f;
+    float spriteScale = spriteSize / 64.0f;
+    float spriteX = leftX + (leftW - spriteSize) / 2.0f;
+    float spriteY = leftY + (leftH - spriteSize) / 2.0f;
+
+    drawCharacterSprite(cs, spriteX, spriteY, spriteScale, false);
+
+    // --- RIGHT COLUMN: Top (Character Name) ---
+    DrawRectangle(rightX, rightY, rightW, nameBoxH, Fade(charColor, 0.25f));
+    DrawRectangleLinesEx({rightX, rightY, rightW, nameBoxH}, 3, charColor);
+
+    float nameFontSize = nameBoxH * 0.6f;
     Vector2 nameSize = MeasureTextEx(font8bit, charName, nameFontSize, 2);
-    DrawTextEx(font8bit, charName, {screenW / 2.0f - nameSize.x / 2.0f, boxY + boxH + screenH * 0.02f}, nameFontSize, 2, buttonYellow);
+    DrawTextEx(font8bit, charName, {rightX + (rightW - nameSize.x) / 2.0f, rightY + (nameBoxH - nameSize.y) / 2.0f}, nameFontSize, 2, WHITE);
 
-    // Description
-    float descFontSize = screenH * 0.035f;
-    Vector2 descSize = MeasureTextEx(font8bit, charDesc, descFontSize, 1);
-    DrawTextEx(font8bit, charDesc, {screenW / 2.0f - descSize.x / 2.0f, boxY + boxH + screenH * 0.09f}, descFontSize, 1, Fade(WHITE, 0.9f));
+    // --- RIGHT COLUMN: Bottom (Stats & Skill Box) ---
+    DrawRectangle(rightX, statsBoxY, rightW, statsBoxH, Fade(BLACK, 0.4f));
+    DrawRectangleLinesEx({rightX, statsBoxY, rightW, statsBoxH}, 2, Fade(WHITE, 0.2f));
 
+    float padX = rightW * 0.05f;
+    float padY = statsBoxH * 0.08f;
+    float rowH = statsBoxH * 0.13f;
+    float statTextSize = statsBoxH * 0.08f;
+
+    // HP Line
+    std::string hpText = "BASE HP:  " + std::to_string(baseHp);
+    DrawTextEx(font8bit, hpText.c_str(), {rightX + padX, statsBoxY + padY}, statTextSize, 1, GREEN);
+
+    // Damage Line
+    std::string dmgText = "BASE DMG: " + std::to_string(baseDmg);
+    DrawTextEx(font8bit, dmgText.c_str(), {rightX + padX, statsBoxY + padY + rowH}, statTextSize, 1, ORANGE);
+
+    // Skill Header
+    DrawTextEx(font8bit, "SPECIAL SKILL:", {rightX + padX, statsBoxY + padY + rowH * 2.0f}, statsBoxH * 0.07f, 1, buttonYellow);
+
+    // Skill Description Lines (Manually wrapped for pixel-perfect display)
+    std::vector<std::string> skillLines;
+    if (ui.characterMenuIndex == 1) {
+        skillLines = {
+            "+5 basic DMG per pair of turns (X - O).",
+            "Resets to 120 when a player wins/loses",
+            "the round."
+        };
+    } else if (ui.characterMenuIndex == 2) {
+        skillLines = {
+            "Thorns: Reflects 25% of any received",
+            "damage back to the attacker passively."
+        };
+    } else if (ui.characterMenuIndex == 3) {
+        skillLines = {
+            "Lifesteal: Heals player health by 30%",
+            "of actual damage dealt during successful",
+            "attacks."
+        };
+    } else {
+        skillLines = {
+            "Burn: Winning a round applies a Burn stack.",
+            "Opponent takes 5 DMG per stack every pair",
+            "of turns (X - O). Stacks infinitely."
+        };
+    }
+
+    float skillLineFontSize = statsBoxH * 0.072f;
+    float startY = statsBoxY + padY + rowH * 3.1f;
+    for (size_t i = 0; i < skillLines.size(); ++i)
+    {
+        DrawTextEx(font8bit, skillLines[i].c_str(),
+                   {rightX + padX, startY + i * (skillLineFontSize * 1.35f)},
+                   skillLineFontSize, 1, Fade(WHITE, 0.9f));
+    }
+
+    // --- FOOTER & NAVIGATION ---
     // Indicators (● ● ○)
     float dotGap = 40.0f;
-    float dotsStartX = screenW / 2.0f - dotGap;
+    float dotsStartX = screenW / 2.0f - dotGap * 1.5f;
     float dotsY = panelY + panelH - screenH * 0.08f;
-    for (int i = 1; i <= 3; i++)
+    for (int i = 1; i <= 4; i++)
     {
         if (i == ui.characterMenuIndex)
             DrawCircle(dotsStartX + (i - 1) * dotGap, dotsY, 10.0f, buttonYellow);
@@ -484,7 +612,7 @@ void drawGameIntro(const MatchState &match, const UIState &ui)
     float speedMultiplier = velocity / 30.0f;
 
     drawParallaxBackground(speedMultiplier);
-    drawCharacters(ui.introCamX);
+    drawCharacters(match, ui.introCamX);
 }
 
 // Nhom ban co
@@ -540,13 +668,15 @@ static void drawPauseOverlay(const UIState &ui)
     }
 }
 
-void drawCaroGame(const MatchState &match, const UIState &ui)
+void drawCaroGame(const MatchState &match, UIState &ui)
 {
     drawParallaxBackground(0.0f);
-    drawCharacters(0.0f);
-    drawStatusPanel(match);
+    drawCharacters(match, 0.0f);
+    drawStatusPanel(match, ui);
     drawBoard(match, ui);
-    if (ui.isPaused) drawPauseOverlay(ui);
+    drawFloatingTexts(ui);
+    if (ui.isPaused)
+        drawPauseOverlay(ui);
 }
 
 static void drawBoard(const MatchState &match, const UIState &ui)
@@ -593,6 +723,39 @@ static void drawBoard(const MatchState &match, const UIState &ui)
             }
         }
     }
+
+    // Vẽ highlight nhấp nháy các ô thắng (5 nước win)
+    drawWinningHighlight(match, layout);
+}
+
+// --- WINNING CELLS BLINK ---
+static void drawWinningHighlight(const MatchState &match, const BoardLayout &layout)
+{
+    const auto &cells = match.currentRound.winningCells;
+    if (cells.empty())
+        return;
+
+    // Nhấp nháy: sử dụng sin() để tạo hiệu ứng blink mượt
+    float time = (float)GetTime();
+    float blinkAlpha = 0.3f + 0.5f * (0.5f + 0.5f * std::sin(time * 6.0f)); // 0.3 ~ 0.8
+
+    Color winColor;
+    if (match.currentRound.result == X_WINS)
+        winColor = {255, 215, 0, (unsigned char)(blinkAlpha * 255)}; // Vàng gold
+    else
+        winColor = {0, 200, 255, (unsigned char)(blinkAlpha * 255)}; // Cyan
+
+    for (auto &cell : cells)
+    {
+        int row = cell.first;
+        int col = cell.second;
+        float cellX = layout.startX + col * layout.cellSize;
+        float cellY = layout.startY + row * layout.cellSize;
+
+        DrawRectangle((int)cellX, (int)cellY, (int)layout.cellSize, (int)layout.cellSize, winColor);
+        DrawRectangleLinesEx({cellX, cellY, layout.cellSize, layout.cellSize}, 3,
+                             Fade(WHITE, blinkAlpha));
+    }
 }
 static void drawTurnBanner(const MatchState &match)
 {
@@ -601,7 +764,11 @@ static void drawTurnBanner(const MatchState &match)
 
     BoardLayout layout = getBoardLayout(screenW, screenH);
 
-    const char *turnText = (match.currentRound.toMove == X) ? "TURN: PLAYER X" : "TURN: PLAYER O";
+    const char *xName = match.playerX.name.empty() ? "PLAYER X" : match.playerX.name.c_str();
+    const char *oName = match.playerO.name.empty() ? "PLAYER O" : match.playerO.name.c_str();
+    const char *turnText = (match.currentRound.toMove == X)
+                               ? TextFormat("TURN: %s", xName)
+                               : TextFormat("TURN: %s", oName);
     Color turnColor = (match.currentRound.toMove == X) ? RED : BLUE;
 
     float fontSize = screenH * 0.04f;
@@ -624,32 +791,56 @@ static void drawTurnBanner(const MatchState &match)
                {turnBoxX + paddingX, turnBoxY + paddingY},
                fontSize, 0, RAYWHITE);
 }
-static void drawPlayerPanel(const char* name, int health, Color accent,
+static void drawPlayerPanel(const char *name, float displayHealth, int actualHealth, int maxHealth,
+                            Color accent,
                             float x, float y, float barW, float barH,
                             float nameFontSize, float hpFontSize)
 {
-    Color hpBg     = Fade(RAYWHITE, 0.16f);
+    Color hpBg = Fade(RAYWHITE, 0.16f);
     Color hpBorder = Fade(WHITE, 0.90f);
 
-    DrawRectangle((int)(x - 20), (int)(y - 20), (int)(barW + 40), 150, Fade(BLACK, 0.50f));
+    // Tính chiều cao tổng của panel dựa trên nội dung thực tế
+    Vector2 nameSize = MeasureTextEx(font8bit, name, nameFontSize, 0);
+    float nameBlockH = nameSize.y; // chiều cao tên
+    float gap1 = 12.0f;            // khoảng cách tên -> thanh HP
+    float gap2 = 10.0f;            // khoảng cách thanh HP -> text HP
+    Vector2 hpTextSize = MeasureTextEx(font8bit, TextFormat("HP: %d/%d", actualHealth, maxHealth), hpFontSize, 0);
+    float hpTextBlockH = hpTextSize.y;
+
+    float contentH = nameBlockH + gap1 + barH + gap2 + hpTextBlockH;
+    float panelPadding = 16.0f;
+    float panelH = contentH + panelPadding * 2.0f;
+    float panelW = barW + 40.0f;
+
+    // Vẽ background panel
+    DrawRectangle((int)(x - 20), (int)(y - panelPadding), (int)panelW, (int)panelH, Fade(BLACK, 0.50f));
+
+    // Vẽ tên (căn dọc chính xác theo MeasureTextEx)
     DrawTextEx(font8bit, name, {x, y}, nameFontSize, 0, accent);
 
-    float hpFill = barW * ((float)health / MAX_HEALTH);
-    float barY   = y + nameFontSize + 12;
-    DrawRectangle((int)x, (int)barY, (int)barW,   (int)barH, hpBg);
+    // Thanh HP mượt (dùng displayHealth thay vì actualHealth)
+    float hpFill = barW * (displayHealth / (float)maxHealth);
+    if (hpFill < 0.0f) hpFill = 0.0f;
+    float barY = y + nameBlockH + gap1;
+    DrawRectangle((int)x, (int)barY, (int)barW, (int)barH, hpBg);
     DrawRectangle((int)x, (int)barY, (int)hpFill, (int)barH, accent);
     DrawRectangleLinesEx({x, barY, barW, barH}, 3, hpBorder);
 
+    // Text HP (hiển thị số thực tế, không phải display)
     DrawTextEx(font8bit,
-               TextFormat("HP: %d/%d", health, MAX_HEALTH),
-               {x, barY + barH + 12}, hpFontSize, 0, RAYWHITE);
+               TextFormat("HP: %d/%d", actualHealth, maxHealth),
+               {x, barY + barH + gap2}, hpFontSize, 0, RAYWHITE);
 }
 
 static void drawTurnIndicator(const MatchState &match, int screenW, int screenH)
 {
     float turnFontSize = screenH * 0.04f;
-    const char *turnText = (match.currentRound.toMove == X) ? "TURN: PLAYER X" : "TURN: PLAYER O";
-    Color turnColor      = (match.currentRound.toMove == X) ? RED : BLUE;
+    const char *xName = match.playerX.name.empty() ? "PLAYER X" : match.playerX.name.c_str();
+    const char *oName = match.playerO.name.empty() ? "PLAYER O" : match.playerO.name.c_str();
+    const char *turnText = (match.currentRound.toMove == X)
+                               ? TextFormat("TURN: %s", xName)
+                               : TextFormat("TURN: %s", oName);
+    Color turnColor = (match.currentRound.toMove == X) ? RED : BLUE;
 
     Vector2 turnSize = MeasureTextEx(font8bit, turnText, turnFontSize, 0);
     float turnBoxW = turnSize.x + 60.0f;
@@ -664,22 +855,86 @@ static void drawTurnIndicator(const MatchState &match, int screenW, int screenH)
                turnFontSize, 0, RAYWHITE);
 }
 
-static void drawStatusPanel(const MatchState &match)
+static void drawStatusPanel(const MatchState &match, UIState &ui)
 {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
 
-    float nameFontSize = screenH * 0.08f;
-    float hpFontSize   = screenH * 0.035f;
-    float barW         = screenW * 0.20f;
-    float barH         = screenH * 0.045f;
+    // --- Smooth HP interpolation (lerp) ---
+    float dt = GetFrameTime();
+    float lerpSpeed = 2.5f; // tốc độ nội suy (càng lớn càng nhanh)
 
-    drawPlayerPanel("Player X", match.playerX.health, RED,
+    float targetX = (float)match.playerX.health;
+    float targetO = (float)match.playerO.health;
+
+    // Lerp: displayHealth tiến dần về targetHealth
+    ui.displayHealthX += (targetX - ui.displayHealthX) * lerpSpeed * dt;
+    ui.displayHealthO += (targetO - ui.displayHealthO) * lerpSpeed * dt;
+
+    // Snap khi đủ gần
+    if (std::fabs(ui.displayHealthX - targetX) < 0.5f)
+        ui.displayHealthX = targetX;
+    if (std::fabs(ui.displayHealthO - targetO) < 0.5f)
+        ui.displayHealthO = targetO;
+
+    float nameFontSize = screenH * 0.06f;
+    float hpFontSize = screenH * 0.03f;
+    float barW = screenW * 0.20f;
+    float barH = screenH * 0.04f;
+
+    const char *xName = match.playerX.name.empty() ? "Player X" : match.playerX.name.c_str();
+    const char *oName = match.playerO.name.empty() ? "Player O" : match.playerO.name.c_str();
+
+    drawPlayerPanel(xName, ui.displayHealthX, match.playerX.health, match.playerX.maxHealth, RED,
                     screenW * 0.05f, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
-    drawPlayerPanel("Player O", match.playerO.health, BLUE,
+    drawPlayerPanel(oName, ui.displayHealthO, match.playerO.health, match.playerO.maxHealth, BLUE,
                     screenW * 0.95f - barW, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
 
     drawTurnIndicator(match, screenW, screenH);
+}
+
+// --- FLOATING DAMAGE/HEAL TEXT ---
+static void drawFloatingTexts(UIState &ui)
+{
+    float dt = GetFrameTime();
+    int screenH = GetScreenHeight();
+    float fontSize = screenH * 0.06f;
+
+    for (int i = (int)ui.floatingTexts.size() - 1; i >= 0; --i)
+    {
+        auto &ft = ui.floatingTexts[i];
+        ft.timer -= dt;
+
+        if (ft.timer <= 0.0f)
+        {
+            ui.floatingTexts.erase(ui.floatingTexts.begin() + i);
+            continue;
+        }
+
+        // Tiến trình: 1.0 -> 0.0
+        float progress = ft.timer / ft.maxTimer;
+
+        // Bay lên + fade out
+        float offsetY = (1.0f - progress) * screenH * 0.08f;
+        float alpha = progress;
+
+        // Scale nhỏ dần
+        float scale = 0.7f + 0.3f * progress;
+        float currentFontSize = fontSize * scale;
+
+        Vector2 textSize = MeasureTextEx(font8bit, ft.text.c_str(), currentFontSize, 2);
+        float drawX = ft.x - textSize.x / 2.0f;
+        float drawY = ft.y - offsetY;
+
+        // Shadow
+        DrawTextEx(font8bit, ft.text.c_str(),
+                   {drawX + 3, drawY + 3}, currentFontSize, 2,
+                   Fade(BLACK, alpha * 0.6f));
+        // Main text
+        DrawTextEx(font8bit, ft.text.c_str(),
+                   {drawX, drawY}, currentFontSize, 2,
+                   Fade(ft.color, alpha));
+    }
 }
 // nhom game over: Lam tam
 void drawGameOver(const MatchState &match, const UIState &ui)
@@ -689,12 +944,18 @@ void drawGameOver(const MatchState &match, const UIState &ui)
     int screenH = GetScreenHeight();
 
     drawParallaxBackground(0.0f); // Lock background
-    drawCharacters(0.0f);
+    drawCharacters(match, 0.0f);
+
+    const char *xName = match.playerX.name.empty() ? "X" : match.playerX.name.c_str();
+    const char *oName = match.playerO.name.empty() ? "O" : match.playerO.name.c_str();
 
     Vector2 measure = MeasureTextEx(font8bit, "GAME OVER", 0.25f * screenH, 0.0);
-    Vector2 measureStat = MeasureTextEx(font8bit, "X WINS", 0.15f * screenH, 0.0f);
+    const char *winMsg = (match.matchResult == X_WINS)
+                             ? TextFormat("%s WINS", xName)
+                             : TextFormat("%s WINS", oName);
+    Vector2 measureStat = MeasureTextEx(font8bit, winMsg, 0.15f * screenH, 0.0f);
     DrawTextEx(font8bit, "GAME OVER", {screenW / 2 - measure.x / 2, screenH * 0.4f - measure.y / 2}, 0.25f * screenH, 0.0, buttonYellow);
-    DrawTextEx(font8bit, (match.matchResult == X_WINS) ? "X WINS" : "O WINS",
+    DrawTextEx(font8bit, winMsg,
                {screenW / 2 - measureStat.x / 2, screenH * 0.4f + measure.y / 2}, 0.15f * screenH, 0.0, BLACK);
 }
 
@@ -799,16 +1060,224 @@ void drawLoadGameScreen(const UIState &ui, const std::vector<std::string> &saveF
         DrawRectangle((int)rowX, (int)rowY, (int)rowWidth, (int)rowHeight, bgColor);
         DrawRectangleLinesEx({rowX, rowY, rowWidth, rowHeight}, 2, borderColor);
 
-        std::string displayName = formatSaveDisplayName(saveFiles[i]);
+        // Parse tên file để lấy tên đặt và ngày giờ
+        std::string displayName;
+        std::string dateTimeInfo;
+        parseSaveFileName(saveFiles[i], displayName, dateTimeInfo);
 
-        Vector2 textSize = MeasureTextEx(font8bit, displayName.c_str(), rowFontSize, spacing);
-        float textX = rowX + (rowWidth - textSize.x) / 2.0f;
-        float textY = rowY + (rowHeight - textSize.y) / 2.0f;
+        // Vẽ tên đặt (chính)
+        float nameFontSize = rowFontSize;
+        Vector2 nameSize = MeasureTextEx(font8bit, displayName.c_str(), nameFontSize, spacing);
+        float nameX = rowX + rowWidth * 0.04f;
+        float nameY = rowY + (rowHeight - nameSize.y) / 2.0f;
+        DrawTextEx(font8bit, displayName.c_str(), {nameX, nameY}, nameFontSize, spacing, textColor);
 
-        DrawTextEx(font8bit, displayName.c_str(),
-                   {textX, textY},
-                   rowFontSize, spacing, textColor);
+        // Vẽ ngày giờ (nhỏ, bên phải)
+        if (!dateTimeInfo.empty())
+        {
+            float dtFontSize = rowFontSize * 0.55f;
+            Vector2 dtSize = MeasureTextEx(font8bit, dateTimeInfo.c_str(), dtFontSize, spacing);
+            float dtX = rowX + rowWidth - dtSize.x - rowWidth * 0.04f;
+            float dtY = rowY + (rowHeight - dtSize.y) / 2.0f;
+            Color dtColor = isSelected ? Fade(buttonDarkPurple, 0.7f) : Fade(RAYWHITE, 0.55f);
+            DrawTextEx(font8bit, dateTimeInfo.c_str(), {dtX, dtY}, dtFontSize, spacing, dtColor);
+        }
     }
+
+    // Footer hint
+    const char *footer = "ENTER: Load  |  DEL/BKSP: Delete  |  ESC: Back";
+    float footerSize = screenH * 0.022f;
+    Vector2 footerMeasure = MeasureTextEx(font8bit, footer, footerSize, 1.0f);
+    DrawTextEx(font8bit, footer,
+               {screenW / 2.0f - footerMeasure.x / 2.0f, screenH * 0.92f},
+               footerSize, 1.0f, Fade(WHITE, 0.45f));
+
+    // --- Popup xác nhận xoá ---
+    if (ui.showDeleteConfirm)
+    {
+        // Overlay mờ toàn màn hình
+        DrawRectangle(0, 0, screenW, screenH, Fade(BLACK, 0.65f));
+
+        // Panel xác nhận
+        float popupW = screenW * 0.40f;
+        float popupH = screenH * 0.22f;
+        float popupX = (screenW - popupW) / 2.0f;
+        float popupY = (screenH - popupH) / 2.0f;
+
+        DrawRectangle((int)popupX, (int)popupY, (int)popupW, (int)popupH, buttonDarkPurple);
+        DrawRectangleLinesEx({popupX, popupY, popupW, popupH}, 4, RED);
+
+        // Tên file sẽ bị xoá
+        std::string displayName, dateTimeInfo;
+        parseSaveFileName(saveFiles[ui.loadMenuIndex], displayName, dateTimeInfo);
+
+        const char *warnText = "Delete this save?";
+        float warnSize = screenH * 0.04f;
+        Vector2 warnMeasure = MeasureTextEx(font8bit, warnText, warnSize, 2.0f);
+        DrawTextEx(font8bit, warnText,
+                   {screenW / 2.0f - warnMeasure.x / 2.0f, popupY + popupH * 0.12f},
+                   warnSize, 2.0f, RED);
+
+        // Hiển thị tên file
+        std::string fileDisplay = "\"" + displayName + "\"";
+        if (!dateTimeInfo.empty())
+            fileDisplay += "  (" + dateTimeInfo + ")";
+        float fileSize = screenH * 0.028f;
+        Vector2 fileMeasure = MeasureTextEx(font8bit, fileDisplay.c_str(), fileSize, 1.0f);
+        DrawTextEx(font8bit, fileDisplay.c_str(),
+                   {screenW / 2.0f - fileMeasure.x / 2.0f, popupY + popupH * 0.40f},
+                   fileSize, 1.0f, buttonYellow);
+
+        // Dòng hướng dẫn
+        const char *confirmHint = "ENTER: Confirm Delete  |  ESC/BKSP/DEL: Cancel";
+        float hintSize = screenH * 0.022f;
+        Vector2 hintMeasure = MeasureTextEx(font8bit, confirmHint, hintSize, 1.0f);
+        DrawTextEx(font8bit, confirmHint,
+                   {screenW / 2.0f - hintMeasure.x / 2.0f, popupY + popupH * 0.68f},
+                   hintSize, 1.0f, Fade(WHITE, 0.6f));
+    }
+}
+
+void drawSaveGameScreen(const UIState &ui)
+{
+    drawParallaxBackground(1.0f);
+
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    // Panel chính
+    float panelW = screenW * 0.55f;
+    float panelH = screenH * 0.45f;
+    float panelX = (screenW - panelW) / 2.0f;
+    float panelY = (screenH - panelH) / 2.0f;
+
+    DrawRectangle(panelX, panelY, panelW, panelH, Fade(BLACK, 0.75f));
+    DrawRectangleLinesEx({panelX, panelY, panelW, panelH}, 4, buttonYellow);
+
+    // Tiêu đề
+    const char *title = "SAVE GAME";
+    float titleSize = screenH * 0.07f;
+    Vector2 titleMeasure = MeasureTextEx(font8bit, title, titleSize, 2.0f);
+    DrawTextEx(font8bit, title,
+               {screenW / 2.0f - titleMeasure.x / 2.0f, panelY + panelH * 0.06f},
+               titleSize, 2.0f, buttonYellow);
+
+    // Hướng dẫn
+    const char *hint = "Enter a name for your save (letters & numbers only):";
+    float hintSize = screenH * 0.028f;
+    Vector2 hintMeasure = MeasureTextEx(font8bit, hint, hintSize, 1.0f);
+    DrawTextEx(font8bit, hint,
+               {screenW / 2.0f - hintMeasure.x / 2.0f, panelY + panelH * 0.22f},
+               hintSize, 1.0f, Fade(WHITE, 0.8f));
+
+    // Ô nhập tên
+    float inputBoxW = panelW * 0.75f;
+    float inputBoxH = screenH * 0.06f;
+    float inputBoxX = screenW / 2.0f - inputBoxW / 2.0f;
+    float inputBoxY = panelY + panelH * 0.38f;
+
+    Color inputBg = Fade(WHITE, 0.1f);
+    Color inputBorder = ui.saveNameError ? RED : buttonYellow;
+    DrawRectangle((int)inputBoxX, (int)inputBoxY, (int)inputBoxW, (int)inputBoxH, inputBg);
+    DrawRectangleLinesEx({inputBoxX, inputBoxY, inputBoxW, inputBoxH}, 3, inputBorder);
+
+    // Hiển thị tên đang nhập + con trỏ nhấp nháy
+    float inputFontSize = inputBoxH * 0.55f;
+    std::string displayText = ui.saveNameInput;
+    // Con trỏ nhấp nháy
+    if (((int)(GetTime() * 2.0f) % 2 == 0) && displayText.size() < 20)
+        displayText += "_";
+
+    Vector2 inputMeasure = MeasureTextEx(font8bit, displayText.c_str(), inputFontSize, 1.0f);
+    DrawTextEx(font8bit, displayText.c_str(),
+               {inputBoxX + 16.0f, inputBoxY + (inputBoxH - inputMeasure.y) / 2.0f},
+               inputFontSize, 1.0f, RAYWHITE);
+
+    // Thông báo lỗi
+    if (ui.saveNameError)
+    {
+        const char *errMsg;
+        if (ui.saveNameInput.empty())
+            errMsg = "Name cannot be empty!";
+        else
+            errMsg = "Only letters (A-Z, a-z) and numbers (0-9) are allowed!";
+        float errSize = screenH * 0.024f;
+        Vector2 errMeasure = MeasureTextEx(font8bit, errMsg, errSize, 1.0f);
+        DrawTextEx(font8bit, errMsg,
+                   {screenW / 2.0f - errMeasure.x / 2.0f, inputBoxY + inputBoxH + 12.0f},
+                   errSize, 1.0f, RED);
+    }
+
+    // Footer
+    const char *footer = "ENTER: Save  |  ESC: Cancel";
+    float footerSize = screenH * 0.025f;
+    Vector2 footerMeasure = MeasureTextEx(font8bit, footer, footerSize, 1.0f);
+    DrawTextEx(font8bit, footer,
+               {screenW / 2.0f - footerMeasure.x / 2.0f, panelY + panelH - footerMeasure.y - 20.0f},
+               footerSize, 1.0f, Fade(WHITE, 0.5f));
+}
+
+void drawNameInputScreen(const UIState &ui)
+{
+    drawParallaxBackground(1.0f);
+
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    // Panel
+    float panelW = screenW * 0.50f;
+    float panelH = screenH * 0.40f;
+    float panelX = (screenW - panelW) / 2.0f;
+    float panelY = (screenH - panelH) / 2.0f;
+
+    DrawRectangle(panelX, panelY, panelW, panelH, Fade(BLACK, 0.75f));
+    DrawRectangleLinesEx({panelX, panelY, panelW, panelH}, 4, buttonYellow);
+
+    // Tiêu đề
+    const char *title = ui.isEnteringPlayerXName ? "ENTER PLAYER X NAME" : "ENTER PLAYER O NAME";
+    float titleSize = screenH * 0.06f;
+    Vector2 titleMeasure = MeasureTextEx(font8bit, title, titleSize, 2.0f);
+    Color titleColor = ui.isEnteringPlayerXName ? RED : BLUE;
+    DrawTextEx(font8bit, title,
+               {screenW / 2.0f - titleMeasure.x / 2.0f, panelY + panelH * 0.08f},
+               titleSize, 2.0f, titleColor);
+
+    // Hint
+    const char *hint = ui.isPVE ? "Enter your name (or press ENTER for default):"
+                                : "Enter name (letters, numbers, spaces, - and '):";
+    float hintSize = screenH * 0.026f;
+    Vector2 hintMeasure = MeasureTextEx(font8bit, hint, hintSize, 1.0f);
+    DrawTextEx(font8bit, hint,
+               {screenW / 2.0f - hintMeasure.x / 2.0f, panelY + panelH * 0.26f},
+               hintSize, 1.0f, Fade(WHITE, 0.7f));
+
+    // Ô nhập
+    float inputBoxW = panelW * 0.75f;
+    float inputBoxH = screenH * 0.055f;
+    float inputBoxX = screenW / 2.0f - inputBoxW / 2.0f;
+    float inputBoxY = panelY + panelH * 0.42f;
+
+    DrawRectangle((int)inputBoxX, (int)inputBoxY, (int)inputBoxW, (int)inputBoxH, Fade(WHITE, 0.1f));
+    DrawRectangleLinesEx({inputBoxX, inputBoxY, inputBoxW, inputBoxH}, 3, buttonYellow);
+
+    // Hiển thị text + con trỏ
+    float inputFontSize = inputBoxH * 0.55f;
+    std::string displayText = ui.nameInputBuffer;
+    if (((int)(GetTime() * 2.0f) % 2 == 0) && displayText.size() < 20)
+        displayText += "_";
+
+    Vector2 inputMeasure = MeasureTextEx(font8bit, displayText.c_str(), inputFontSize, 1.0f);
+    DrawTextEx(font8bit, displayText.c_str(),
+               {inputBoxX + 12.0f, inputBoxY + (inputBoxH - inputMeasure.y) / 2.0f},
+               inputFontSize, 1.0f, RAYWHITE);
+
+    // Footer
+    const char *footer = "ENTER: Confirm  |  ESC: Back to Menu";
+    float footerSize = screenH * 0.024f;
+    Vector2 footerMeasure = MeasureTextEx(font8bit, footer, footerSize, 1.0f);
+    DrawTextEx(font8bit, footer,
+               {screenW / 2.0f - footerMeasure.x / 2.0f, panelY + panelH - footerMeasure.y - 16.0f},
+               footerSize, 1.0f, Fade(WHITE, 0.5f));
 }
 
 void drawSettingsScreen(const UIState &ui)
@@ -885,11 +1354,60 @@ void drawSettingsScreen(const UIState &ui)
     }
 }
 
-std::string formatSaveDisplayName(const std::string &fileName)
+void parseSaveFileName(const std::string &fileName, std::string &displayName, std::string &dateTimeInfo)
 {
+    displayName.clear();
+    dateTimeInfo.clear();
+
+    // Kiểm tra đuôi .txt
+    if (fileName.size() < 5 || fileName.substr(fileName.size() - 4) != ".txt")
+    {
+        displayName = fileName;
+        return;
+    }
+
+    // Bỏ đuôi .txt
+    std::string stem = fileName.substr(0, fileName.size() - 4);
+
+    // Định dạng mới: <tên>_<YYYYMMDD_HHMMSS>
+    // Tìm dấu _ cuối cùng ngăn cách timestamp (định dạng YYYYMMDD_HHMMSS = 15 kí tự)
+    // Timestamp pattern: 8 chữ số + _ + 6 chữ số = 15 kí tự
+    if (stem.size() > 16)
+    {
+        // Lấy 15 kí tự cuối, kiểm tra có khớp pattern YYYYMMDD_HHMMSS không
+        std::string suffix = stem.substr(stem.size() - 15);
+        bool match = (suffix.size() == 15 &&
+                      std::isdigit(suffix[0]) && std::isdigit(suffix[1]) &&
+                      std::isdigit(suffix[2]) && std::isdigit(suffix[3]) &&
+                      std::isdigit(suffix[4]) && std::isdigit(suffix[5]) &&
+                      std::isdigit(suffix[6]) && std::isdigit(suffix[7]) &&
+                      suffix[8] == '_' &&
+                      std::isdigit(suffix[9]) && std::isdigit(suffix[10]) &&
+                      std::isdigit(suffix[11]) && std::isdigit(suffix[12]) &&
+                      std::isdigit(suffix[13]) && std::isdigit(suffix[14]));
+
+        if (match)
+        {
+            // Tên đặt = phần trước timestamp (bỏ dấu _)
+            displayName = stem.substr(0, stem.size() - 16); // bỏ _<timestamp>
+
+            // Parse ngày giờ
+            std::string year = suffix.substr(0, 4);
+            std::string month = suffix.substr(4, 2);
+            std::string day = suffix.substr(6, 2);
+            std::string hour = suffix.substr(9, 2);
+            std::string minute = suffix.substr(11, 2);
+            std::string second = suffix.substr(13, 2);
+
+            dateTimeInfo = day + "/" + month + "/" + year + " " +
+                           hour + ":" + minute + ":" + second;
+            return;
+        }
+    }
+
+    // Fallback: thử định dạng cũ "save_YYYYMMDD_HHMMSS.txt" (24 kí tự)
     if (fileName.size() == 24 &&
-        fileName.rfind("save_", 0) == 0 &&
-        fileName.substr(fileName.size() - 4) == ".txt")
+        fileName.rfind("save_", 0) == 0)
     {
         std::string year = fileName.substr(5, 4);
         std::string month = fileName.substr(9, 2);
@@ -898,9 +1416,12 @@ std::string formatSaveDisplayName(const std::string &fileName)
         std::string minute = fileName.substr(16, 2);
         std::string second = fileName.substr(18, 2);
 
-        return day + "/" + month + "/" + year + "  -  " +
-               hour + ":" + minute + ":" + second;
+        displayName = "AutoSave";
+        dateTimeInfo = day + "/" + month + "/" + year + " " +
+                       hour + ":" + minute + ":" + second;
+        return;
     }
 
-    return fileName;
+    // Không parse được
+    displayName = fileName;
 }

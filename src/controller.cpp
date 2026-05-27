@@ -3,51 +3,66 @@
 #include "model.h"
 #include "save_manager.h"
 #include <ctime>
+#include <cctype>
 #include "bot_ai.h"
 #include "audio_manager.h"
 
-// Input helpers: gom W/S/A/D và mũi tên thành một lần kiểm tra 
-inline bool isDirUp()    { return IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP); }
-inline bool isDirDown()  { return IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN); }
-inline bool isDirLeft()  { return IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT); }
+// Input helpers: gom W/S/A/D và mũi tên thành một lần kiểm tra
+inline bool isDirUp() { return IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP); }
+inline bool isDirDown() { return IsKeyPressed('S') || IsKeyPressed('s') || IsKeyPressed(KEY_DOWN); }
+inline bool isDirLeft() { return IsKeyPressed('A') || IsKeyPressed('a') || IsKeyPressed(KEY_LEFT); }
 inline bool isDirRight() { return IsKeyPressed('D') || IsKeyPressed('d') || IsKeyPressed(KEY_RIGHT); }
-inline bool isConfirm()  { return IsKeyPressed(KEY_ENTER); }
+inline bool isConfirm() { return IsKeyPressed(KEY_ENTER); }
 
-// Wrap index: cuộn vòng danh sách menu 
-inline int wrapPrevIndex(int current, int total) {
+// Wrap index: cuộn vòng danh sách menu
+inline int wrapPrevIndex(int current, int total)
+{
     return total <= 0 ? 0 : (current - 1 + total) % total;
 }
-inline int wrapNextIndex(int current, int total) {
+inline int wrapNextIndex(int current, int total)
+{
     return total <= 0 ? 0 : (current + 1) % total;
 }
 
 // Bỏ qua mục index 1 (Resolution) khi đang ở chế độ Fullscreen,
 // vì resolution không áp dụng cho fullscreen.
-static int getPrevSettingsIndex(int current, bool isFullscreen) {
+static int getPrevSettingsIndex(int current, bool isFullscreen)
+{
     int idx = current;
-    do { idx = wrapPrevIndex(idx, 7); } while (isFullscreen && idx == 1);
+    do
+    {
+        idx = wrapPrevIndex(idx, 7);
+    } while (isFullscreen && idx == 1);
     return idx;
 }
-static int getNextSettingsIndex(int current, bool isFullscreen) {
+static int getNextSettingsIndex(int current, bool isFullscreen)
+{
     int idx = current;
-    do { idx = wrapNextIndex(idx, 7); } while (isFullscreen && idx == 1);
+    do
+    {
+        idx = wrapNextIndex(idx, 7);
+    } while (isFullscreen && idx == 1);
     return idx;
 }
 
-// Resolution helpers 
+// Resolution helpers
 
 // Kiểm tra độ phân giải có khớp với màn hình hiện tại không.
-static bool isResolutionAllowed(int width, int height) {
+static bool isResolutionAllowed(int width, int height)
+{
     int monitor = GetCurrentMonitor();
     return width <= GetMonitorWidth(monitor) && height <= GetMonitorHeight(monitor);
 }
 
 // Tìm index độ phân giải tiếp theo (step = +1 hoặc -1) mà màn hình hỗ trợ.
 // Nếu không tìm được, giữ nguyên current.
-static int stepResolutionIndex(int current, int step) {
-    for (int i = 1; i <= RESOLUTION_COUNT; i++) {
+static int stepResolutionIndex(int current, int step)
+{
+    for (int i = 1; i <= RESOLUTION_COUNT; i++)
+    {
         int idx = (current + step * i % RESOLUTION_COUNT + RESOLUTION_COUNT) % RESOLUTION_COUNT;
-        if (isResolutionAllowed(RESOLUTIONS[idx].width, RESOLUTIONS[idx].height)) {
+        if (isResolutionAllowed(RESOLUTIONS[idx].width, RESOLUTIONS[idx].height))
+        {
             return idx;
         }
     }
@@ -56,13 +71,17 @@ static int stepResolutionIndex(int current, int step) {
 
 // Đảm bảo resolutionIndex không vượt quá kích thước màn hình.
 // Gọi khi chuyển từ cửa sổ sang fullscreen hoặc khi vào màn Settings.
-static void clampResolutionIndexToMonitor(UIState& ui) {
-    if (isResolutionAllowed(RESOLUTIONS[ui.resolutionIndex].width, RESOLUTIONS[ui.resolutionIndex].height)) {
+static void clampResolutionIndexToMonitor(UIState &ui)
+{
+    if (isResolutionAllowed(RESOLUTIONS[ui.resolutionIndex].width, RESOLUTIONS[ui.resolutionIndex].height))
+    {
         return; // Index hiện tại vẫn hợp lệ, không cần clamp
     }
     // Duyệt từ cao xuống thấp để chọn độ phân giải lớn nhất còn khớp
-    for (int i = RESOLUTION_COUNT - 1; i >= 0; --i) {
-        if (isResolutionAllowed(RESOLUTIONS[i].width, RESOLUTIONS[i].height)) {
+    for (int i = RESOLUTION_COUNT - 1; i >= 0; --i)
+    {
+        if (isResolutionAllowed(RESOLUTIONS[i].width, RESOLUTIONS[i].height))
+        {
             ui.resolutionIndex = i;
             return;
         }
@@ -72,35 +91,217 @@ static void clampResolutionIndexToMonitor(UIState& ui) {
 
 // Áp dụng cài đặt fullscreen / độ phân giải vào cửa sổ raylib.
 // Gọi mỗi khi người dùng thay đổi một trong hai cài đặt trên.
-static void applyDisplaySettings(UIState& ui) {
+static void applyDisplaySettings(UIState &ui)
+{
     // Clamp index trước để tránh truy cập ngoài mảng
-    ui.resolutionIndex = (ui.resolutionIndex < 0) ? 0 :
-                         (ui.resolutionIndex >= RESOLUTION_COUNT) ? RESOLUTION_COUNT - 1 : ui.resolutionIndex;
+    ui.resolutionIndex = (ui.resolutionIndex < 0) ? 0 : (ui.resolutionIndex >= RESOLUTION_COUNT) ? RESOLUTION_COUNT - 1
+                                                                                                 : ui.resolutionIndex;
 
-    const ResolutionOption& res = RESOLUTIONS[ui.resolutionIndex];
+    const ResolutionOption &res = RESOLUTIONS[ui.resolutionIndex];
     int monitor = GetCurrentMonitor();
-    int mWidth  = GetMonitorWidth(monitor);
+    int mWidth = GetMonitorWidth(monitor);
     int mHeight = GetMonitorHeight(monitor);
 
-    if (ui.isFullscreen) {
-        if (!IsWindowFullscreen()) {
+    if (ui.isFullscreen)
+    {
+        if (!IsWindowFullscreen())
+        {
             SetWindowSize(mWidth, mHeight);
             SetWindowPosition(0, 0);
             ToggleFullscreen();
         }
-    } else {
-        if (IsWindowFullscreen()) ToggleFullscreen();
+    }
+    else
+    {
+        if (IsWindowFullscreen())
+            ToggleFullscreen();
         SetWindowSize(res.width, res.height);
 
-        if (res.width >= mWidth && res.height >= mHeight) {
+        if (res.width >= mWidth && res.height >= mHeight)
+        {
             MaximizeWindow();
-        } else {
-            int posX = (mWidth  - res.width)  / 2;
+        }
+        else
+        {
+            int posX = (mWidth - res.width) / 2;
             int posY = (mHeight - res.height) / 2;
             SetWindowPosition(posX, posY);
         }
     }
 }
+// undoMove:
+// Undo the most recent move from the board
+// In PVE mode, if the last move was by the bot, undo both bot and player moves
+void undoMove(MatchState &match, UIState &ui)
+{
+    RoundState &round = match.currentRound;
+
+    // Check preconditions: round must be ongoing
+    if (round.result != ONGOING)
+    {
+        return;
+    }
+
+    // Check if undoStack is not empty
+    if (ui.undoStack.empty())
+    {
+        return;
+    }
+
+    // Get the last move from undoStack
+    MoveRecord lastMove = ui.undoStack.back();
+    ui.undoStack.pop_back();
+
+    // Remove piece from board
+    round.board[lastMove.row][lastMove.col] = NONE;
+
+    // Add move to redoStack
+    ui.redoStack.push_back(lastMove);
+
+    // Mark move as undone in moveHistory
+    for (auto &m : ui.moveHistory)
+    {
+        if (m.row == lastMove.row && m.col == lastMove.col && m.player == lastMove.player && !m.isUndone)
+        {
+            m.isUndone = true;
+            break;
+        }
+    }
+
+    // Decrement turn count
+    round.turnCount--;
+
+    // Handle PVE mode: if last move was bot's, undo player's previous move too
+    if (ui.isPVE && lastMove.player == O)
+    {
+        // Set turn back to player
+        round.toMove = X;
+
+        // Check if there's a player move to undo
+        if (!ui.undoStack.empty())
+        {
+            MoveRecord playerMove = ui.undoStack.back();
+
+            // Only undo if it's the player's move
+            if (playerMove.player == X)
+            {
+                ui.undoStack.pop_back();
+
+                // Remove player's piece from board
+                round.board[playerMove.row][playerMove.col] = NONE;
+
+                // Add to redoStack
+                ui.redoStack.push_back(playerMove);
+
+                // Mark as undone in moveHistory
+                for (auto &m : ui.moveHistory)
+                {
+                    if (m.row == playerMove.row && m.col == playerMove.col && m.player == playerMove.player && !m.isUndone)
+                    {
+                        m.isUndone = true;
+                        break;
+                    }
+                }
+
+                // Decrement turn count again
+                round.turnCount--;
+            }
+        }
+    }
+    else
+    {
+        // PVP mode or player's move in PVE: switch turn back to the player who made the move
+        round.toMove = lastMove.player;
+    }
+}
+
+// redoMove:
+// Redo the most recently undone move
+// In PVE mode, if the top move in redoStack was bot's, redo both player and bot moves
+void redoMove(MatchState &match, UIState &ui)
+{
+    RoundState &round = match.currentRound;
+
+    // Check preconditions: round must be ongoing
+    if (round.result != ONGOING)
+    {
+        return;
+    }
+
+    // Check if redoStack is not empty
+    if (ui.redoStack.empty())
+    {
+        return;
+    }
+
+    // Get the top move from redoStack
+    MoveRecord move = ui.redoStack.back();
+    ui.redoStack.pop_back();
+
+    // Place piece back on board at (row, col)
+    round.board[move.row][move.col] = move.player;
+
+    // Push move to undoStack
+    ui.undoStack.push_back(move);
+
+    // Mark move as not undone in moveHistory
+    for (auto &m : ui.moveHistory)
+    {
+        if (m.row == move.row && m.col == move.col && m.player == move.player && m.isUndone)
+        {
+            m.isUndone = false;
+            break;
+        }
+    }
+
+    // Increment turn count
+    round.turnCount++;
+
+    // Handle PVE mode: if top move in redoStack was bot's, redo both player and bot moves
+    if (ui.isPVE && move.player == X && !ui.redoStack.empty())
+    {
+        // Check if next move in redoStack is bot's move
+        MoveRecord &nextMove = ui.redoStack.back();
+        if (nextMove.player == O)
+        {
+            // Redo bot's move too
+            ui.redoStack.pop_back();
+
+            // Place bot's piece back on board
+            round.board[nextMove.row][nextMove.col] = nextMove.player;
+
+            // Push bot's move to undoStack
+            ui.undoStack.push_back(nextMove);
+
+            // Mark bot's move as not undone in moveHistory
+            for (auto &m : ui.moveHistory)
+            {
+                if (m.row == nextMove.row && m.col == nextMove.col && m.player == nextMove.player && m.isUndone)
+                {
+                    m.isUndone = false;
+                    break;
+                }
+            }
+
+            // Increment turn count again
+            round.turnCount++;
+
+            // Switch turn to bot (opposite player after bot's move)
+            round.toMove = X;
+        }
+        else
+        {
+            // Only player's move was redone, switch turn to bot
+            round.toMove = O;
+        }
+    }
+    else
+    {
+        // PVP mode or bot's move in PVE: switch turn to opposite player
+        round.toMove = (move.player == X) ? O : X;
+    }
+}
+
 // Xử lý một nước đi tại ô (x=row, y=col):
 //   1. Kiểm tra nước đi hợp lệ.
 //   2. Ghi nước đi vào board.
@@ -110,11 +311,93 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
 {
     RoundState &round = match.currentRound;
 
-    if (!checkValidMove(round, x, y)){
+    if (!checkValidMove(round, x, y))
+    {
         return;
     }
 
     makeMove(round, x, y);
+
+    // Create MoveRecord for undo/redo functionality
+    MoveRecord mr;
+    mr.row = x;
+    mr.col = y;
+    mr.player = round.board[x][y];
+    mr.isUndone = false;
+
+    // Add to moveHistory (complete history with undo status)
+    ui.moveHistory.push_back(mr);
+
+    // Clear redo stack when new move is made (Requirement 2.5)
+    ui.redoStack.clear();
+
+    // Implement move history capacity management (Requirements 1.10, 1.11)
+    // Check if undoStack is at capacity before adding new move
+    if (ui.undoStack.size() >= MAX_UNDO_CAPACITY)
+    {
+        // Remove oldest move from undoStack
+        ui.undoStack.erase(ui.undoStack.begin());
+    }
+
+    // Add new move to undoStack
+    ui.undoStack.push_back(mr);
+
+    if (round.turnCount > 0 && round.turnCount % 2 == 0)
+    {
+        // Assassin: +5 damage mỗi cặp lượt (x - o)
+        if (match.playerX.character == ASSASSIN)
+            match.playerX.baseDamage += 5;
+        if (match.playerO.character == ASSASSIN)
+            match.playerO.baseDamage += 5;
+
+        // Sorcerer burn: đối thủ nhận 5 * stacks DMG mỗi cặp lượt
+        int screenW = GetScreenWidth();
+        int screenH = GetScreenHeight();
+
+        if (match.playerX.sorcererStacks > 0)
+        {
+            int burnDmg = 5 * match.playerX.sorcererStacks;
+            match.playerX.health = std::max(match.playerX.health - burnDmg, 0);
+
+            // Floating text (purple) trên panel bị burn (Player X - bên trái)
+            float dmgX = screenW * 0.15f;
+            float dmgY = screenH * 0.14f;
+            UIState::FloatingText ft;
+            ft.text = "-" + std::to_string(burnDmg) + " Burn";
+            ft.color = PURPLE;
+            ft.x = dmgX;
+            ft.y = dmgY;
+            ft.timer = 1.8f;
+            ft.maxTimer = 1.8f;
+            ui.floatingTexts.push_back(ft);
+        }
+        if (match.playerO.sorcererStacks > 0)
+        {
+            int burnDmg = 5 * match.playerO.sorcererStacks;
+            match.playerO.health = std::max(match.playerO.health - burnDmg, 0);
+
+            // Floating text (purple) trên panel bị burn (Player O - bên phải)
+            float dmgX = screenW * 0.85f;
+            float dmgY = screenH * 0.14f;
+            UIState::FloatingText ft;
+            ft.text = "-" + std::to_string(burnDmg) + " Burn";
+            ft.color = PURPLE;
+            ft.x = dmgX;
+            ft.y = dmgY;
+            ft.timer = 1.8f;
+            ft.maxTimer = 1.8f;
+            ui.floatingTexts.push_back(ft);
+        }
+
+        RoundResult mr = checkMatchResult(match);
+        if (mr != ONGOING)
+        {
+            match.matchResult = mr;
+            ui.currentScreen = GAME_OVER;
+            return;
+        }
+    }
+
     RoundResult rr = checkRoundResult(round, x, y);
 
     if (rr == X_WINS || rr == O_WINS)
@@ -122,10 +405,95 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
         round.result = rr;
         match.countRoundsPlayed++;
 
-        // Người thắng tấn công, người thua nhận sát thương
+        // Ghi nhận HP trước khi attack để tính damage/heal
         Player &attacker = (rr == X_WINS) ? match.playerX : match.playerO;
         Player &defender = (rr == X_WINS) ? match.playerO : match.playerX;
+        int defenderHpBefore = defender.health;
+        int attackerHpBefore = attacker.health;
+
         executeAttack(attacker, defender, round.turnCount);
+
+        // --- Spawn floating damage/heal text ---
+        int screenW = GetScreenWidth();
+        int screenH = GetScreenHeight();
+        int damageDealt = defenderHpBefore - defender.health;
+        int healAmount = attacker.health - attackerHpBefore;
+
+        // Damage text (đỏ) — hiện trên panel bên bị đánh
+        if (damageDealt > 0)
+        {
+            float dmgX, dmgY;
+            if (rr == X_WINS) // defender = O → panel bên phải
+            {
+                dmgX = screenW * 0.85f;
+                dmgY = screenH * 0.14f;
+            }
+            else // defender = X → panel bên trái
+            {
+                dmgX = screenW * 0.15f;
+                dmgY = screenH * 0.14f;
+            }
+            UIState::FloatingText ft;
+            ft.text = "-" + std::to_string(damageDealt);
+            ft.color = RED;
+            ft.x = dmgX;
+            ft.y = dmgY;
+            ft.timer = 1.8f;
+            ft.maxTimer = 1.8f;
+            ui.floatingTexts.push_back(ft);
+        }
+
+        // Heal text (xanh lá) — hiện trên panel bên attacker (Vampire)
+        if (healAmount > 0)
+        {
+            float healX, healY;
+            if (rr == X_WINS) // attacker = X → panel bên trái
+            {
+                healX = screenW * 0.15f;
+                healY = screenH * 0.14f;
+            }
+            else // attacker = O → panel bên phải
+            {
+                healX = screenW * 0.85f;
+                healY = screenH * 0.14f;
+            }
+            UIState::FloatingText ft;
+            ft.text = "+" + std::to_string(healAmount);
+            ft.color = GREEN;
+            ft.x = healX;
+            ft.y = healY;
+            ft.timer = 1.8f;
+            ft.maxTimer = 1.8f;
+            ui.floatingTexts.push_back(ft);
+        }
+
+        // Bruiser reflect text (màu cam) — hiện trên panel bên attacker bị phản hồi
+        if (defender.character == BRUISER && damageDealt > 0)
+        {
+            int reflectDmg = (int)(damageDealt * 0.25f);
+            if (reflectDmg > 0)
+            {
+                float reflX, reflY;
+                if (rr == X_WINS) // attacker = X (bên trái), defender = O (Bruiser - bên phải)
+                {
+                    reflX = screenW * 0.15f;
+                    reflY = screenH * 0.19f; // Hơi lệch xuống dưới text hp/heal
+                }
+                else // attacker = O (bên phải), defender = X (Bruiser - bên trái)
+                {
+                    reflX = screenW * 0.85f;
+                    reflY = screenH * 0.19f;
+                }
+                UIState::FloatingText ft;
+                ft.text = "-" + std::to_string(reflectDmg) + " Reflect";
+                ft.color = ORANGE;
+                ft.x = reflX;
+                ft.y = reflY;
+                ft.timer = 1.8f;
+                ft.maxTimer = 1.8f;
+                ui.floatingTexts.push_back(ft);
+            }
+        }
 
         // Kiểm tra xem trận đấu tổng đã có người thắng chưa
         RoundResult mr = checkMatchResult(match);
@@ -209,7 +577,8 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
 {
     if (isDirLeft())
     {
-        if (ui.characterMenuIndex > 1) {
+        if (ui.characterMenuIndex > 1)
+        {
             ui.characterMenuIndex--;
             playSFX(SFX_CLICK);
         }
@@ -217,7 +586,8 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
 
     if (isDirRight())
     {
-        if (ui.characterMenuIndex < 3) {
+        if (ui.characterMenuIndex < 4)
+        {
             ui.characterMenuIndex++;
             playSFX(SFX_CLICK);
         }
@@ -235,8 +605,11 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
         case 2:
             chosen = BRUISER;
             break;
-        default:
+        case 3:
             chosen = VAMPIRE;
+            break;
+        default:
+            chosen = SORCERER;
             break;
         }
 
@@ -256,14 +629,28 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
             playSFX(SFX_CLICK);
 
             Player playerX;
+            playerX.name = ui.playerXName.empty() ? "Player X" : ui.playerXName;
             playerX.character = match.playerX.character;
-            playerX.health = MAX_HEALTH;
+            playerX.maxHealth = getBaseHealth(playerX.character);
+            playerX.health = playerX.maxHealth;
+            playerX.baseDamage = getBaseDamage(playerX.character);
+            playerX.sorcererStacks = 0;
 
             Player playerO;
+            playerO.name = ui.playerOName.empty() ? (ui.isPVE ? "Bot" : "Player O") : ui.playerOName;
             playerO.character = match.playerO.character;
-            playerO.health = MAX_HEALTH;
+            playerO.maxHealth = getBaseHealth(playerO.character);
+            playerO.health = playerO.maxHealth;
+            playerO.baseDamage = getBaseDamage(playerO.character);
+            playerO.sorcererStacks = 0;
 
             initMatch(match, playerX, playerO);
+            ui.moveHistory.clear(); // Xoá lịch sử cho game mới
+            ui.undoStack.clear();   // Clear undo stack for new game
+            ui.redoStack.clear();   // Clear redo stack for new game
+            ui.displayHealthX = (float)match.playerX.maxHealth;
+            ui.displayHealthO = (float)match.playerO.maxHealth;
+            ui.floatingTexts.clear();
             startGameIntro(ui);
         }
     }
@@ -303,22 +690,10 @@ void handleGameplayInput(MatchState &match, UIState &ui)
         {
             if (ui.pauseMenuIndex == 0)
             {
-                time_t t = time(NULL);
-                struct tm timeinfo;
-
-#ifdef _WIN32
-                // Cách dùng của Microsoft Visual Studio
-                localtime_s(&timeinfo, &t);
-#else
-                // Cách dùng chuẩn POSIX cho Linux/macOS
-                localtime_r(&t, &timeinfo);
-#endif
-
-                char buffer[64];
-                std::strftime(buffer, sizeof(buffer), "save_%Y%m%d_%H%M%S.txt", &timeinfo);
-
-                saveGame(match, buffer);
-                ui.isPaused = false;
+                // Chuyển sang màn hình đặt tên save
+                ui.saveNameInput.clear();
+                ui.saveNameError = false;
+                ui.currentScreen = SAVE_GAME;
             }
             else if (ui.pauseMenuIndex == 1)
             {
@@ -378,18 +753,37 @@ void handleGameplayInput(MatchState &match, UIState &ui)
         }
     }
 
+    // Undo: phím Z
+    if (IsKeyPressed('Z') || IsKeyPressed('z'))
+    {
+        undoMove(match, ui);
+        return;
+    }
+
+    // Redo: phím X
+    if (IsKeyPressed('X') || IsKeyPressed('x'))
+    {
+        redoMove(match, ui);
+        return;
+    }
+
     // Đặt quân
     if (isConfirm())
     {
         GameScreen prevGameScreen = ui.currentScreen;
         processMoveAndResult(match, ui, ui.cursorY, ui.cursorX);
-        
+
         // Phat SFX dua theo ket qua sau khi dat quan
-        if (ui.currentScreen == ROUND_OVER) {
+        if (ui.currentScreen == ROUND_OVER)
+        {
             playSFX(SFX_WIN);
-        } else if (ui.currentScreen == GAME_OVER) {
+        }
+        else if (ui.currentScreen == GAME_OVER)
+        {
             playSFX(SFX_GAME_OVER);
-        } else if (prevGameScreen == GAME_BOARD && ui.currentScreen == GAME_BOARD) {
+        }
+        else if (prevGameScreen == GAME_BOARD && ui.currentScreen == GAME_BOARD)
+        {
             playSFX(SFX_PLACE);
         }
 
@@ -407,7 +801,7 @@ void handleGameplayInput(MatchState &match, UIState &ui)
                 // Bot không tìm được ô hợp lệ → bàn cờ đầy, xử lý hòa thủ công
                 match.currentRound.result = DRAW;
                 match.countRoundsPlayed++;
-                ui.currentScreen  = ROUND_OVER;
+                ui.currentScreen = ROUND_OVER;
                 ui.roundOverTimer = 0.0f;
             }
             else
@@ -444,6 +838,9 @@ void handleRoundOverInput(MatchState &match, UIState &ui)
             match.currentRound.toMove = X;
         }
 
+        ui.moveHistory.clear(); // Xoá lịch sử cho round mới
+        ui.undoStack.clear();   // Clear undo stack for new round (Requirement 1.9)
+        ui.redoStack.clear();   // Clear redo stack for new round (Requirement 1.9)
         startMatch(ui);
     }
 }
@@ -523,9 +920,10 @@ void handleModeSelectionInput(UIState &ui)
         }
         else
         {
-            ui.currentScreen = CHARACTER_SELECTION;
-            ui.isSelectingX = true;
-            ui.characterMenuIndex = 1;
+            // PVP: chuyển sang màn nhập tên trước khi chọn nhân vật
+            ui.currentScreen = NAME_INPUT;
+            ui.isEnteringPlayerXName = true;
+            ui.nameInputBuffer.clear();
         }
     }
 
@@ -551,7 +949,7 @@ void handleGameIntroInput(MatchState &match, UIState &ui)
     ui.roundOverTimer += dt;
 
     // Camera bay từ phải sang trái trong 3.5 giây
-    const float totalTime     = 3.5f;
+    const float totalTime = 3.5f;
     const float totalDistance = (float)GetScreenWidth() * 5.0f;
 
     float p = ui.roundOverTimer / totalTime; // Tiến độ [0, 1]
@@ -596,6 +994,10 @@ void handleInput(MatchState &match, UIState &ui)
         handleModeSelectionInput(ui);
         break;
 
+    case NAME_INPUT:
+        handleNameInputScreen(match, ui);
+        break;
+
     case CHARACTER_SELECTION:
         handleCharSelectionInput(match, ui);
         break;
@@ -606,6 +1008,10 @@ void handleInput(MatchState &match, UIState &ui)
 
     case LOAD_GAME:
         handleLoadGameInput(match, ui, cachedSaveFiles);
+        break;
+
+    case SAVE_GAME:
+        handleSaveGameInput(match, ui);
         break;
 
     case SETTINGS:
@@ -630,8 +1036,30 @@ void handleInput(MatchState &match, UIState &ui)
     }
 }
 
-void handleLoadGameInput(MatchState &match, UIState &ui, const std::vector<std::string> &saveFiles)
+void handleLoadGameInput(MatchState &match, UIState &ui, std::vector<std::string> &saveFiles)
 {
+    // --- Đang trong popup xác nhận xoá ---
+    if (ui.showDeleteConfirm)
+    {
+        if (isConfirm())
+        {
+            // Xác nhận xoá
+            deleteSaveFile(saveFiles[ui.loadMenuIndex]);
+            saveFiles = getSaveFilesList();
+            if (saveFiles.empty())
+                ui.loadMenuIndex = 0;
+            else if (ui.loadMenuIndex >= (int)saveFiles.size())
+                ui.loadMenuIndex = (int)saveFiles.size() - 1;
+            ui.showDeleteConfirm = false;
+        }
+        else if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE) || IsKeyPressed(KEY_DELETE))
+        {
+            // Huỷ xoá
+            ui.showDeleteConfirm = false;
+        }
+        return; // Chặn mọi input khác khi đang confirm
+    }
+
     if (saveFiles.empty())
     {
         if (IsKeyPressed(KEY_ESCAPE) || isConfirm())
@@ -655,10 +1083,22 @@ void handleLoadGameInput(MatchState &match, UIState &ui, const std::vector<std::
 
     if (isConfirm())
     {
-        if (loadGame(match, saveFiles[ui.loadMenuIndex]))
+        ui.moveHistory.clear();
+        ui.undoStack.clear(); // Clear undo stack before loading
+        ui.redoStack.clear(); // Clear redo stack before loading
+        if (loadGame(match, ui.moveHistory, ui.undoStack, ui.redoStack, saveFiles[ui.loadMenuIndex]))
         {
+            ui.displayHealthX = (float)match.playerX.health;
+            ui.displayHealthO = (float)match.playerO.health;
+            ui.floatingTexts.clear();
             startGameIntro(ui);
         }
+    }
+
+    // Yêu cầu xác nhận xoá file save
+    if (IsKeyPressed(KEY_DELETE) || IsKeyPressed(KEY_BACKSPACE))
+    {
+        ui.showDeleteConfirm = true;
     }
 
     if (IsKeyPressed(KEY_ESCAPE))
@@ -667,7 +1107,176 @@ void handleLoadGameInput(MatchState &match, UIState &ui, const std::vector<std::
     }
 }
 
-void handleSettingsInput(UIState& ui) {
+void handleSaveGameInput(MatchState &match, UIState &ui)
+{
+    // ESC: quay lại game (pause)
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
+        ui.currentScreen = GAME_BOARD;
+        ui.isPaused = true;
+        ui.pauseMenuIndex = 0;
+        return;
+    }
+
+    // Backspace: xoá kí tự cuối
+    if (IsKeyPressed(KEY_BACKSPACE))
+    {
+        if (!ui.saveNameInput.empty())
+        {
+            ui.saveNameInput.pop_back();
+            ui.saveNameError = false;
+        }
+        return;
+    }
+
+    // Enter: xác nhận lưu
+    if (isConfirm())
+    {
+        if (ui.saveNameInput.empty())
+        {
+            ui.saveNameError = true;
+            return;
+        }
+
+        // Kiểm tra chỉ chứa chữ và số
+        bool valid = true;
+        for (char c : ui.saveNameInput)
+        {
+            if (!std::isalnum(static_cast<unsigned char>(c)))
+            {
+                valid = false;
+                break;
+            }
+        }
+
+        if (!valid)
+        {
+            ui.saveNameError = true;
+            return;
+        }
+
+        // Tạo timestamp
+        time_t t = time(NULL);
+        struct tm timeinfo;
+#ifdef _WIN32
+        localtime_s(&timeinfo, &t);
+#else
+        localtime_r(&t, &timeinfo);
+#endif
+        char timeBuf[32];
+        std::strftime(timeBuf, sizeof(timeBuf), "%Y%m%d_%H%M%S", &timeinfo);
+
+        // Tạo tên file: <tên>_<ngày giờ>.txt
+        std::string filename = ui.saveNameInput + "_" + timeBuf + ".txt";
+
+        saveGame(match, ui.moveHistory, ui.undoStack, ui.redoStack, filename);
+        ui.isPaused = false;
+        ui.currentScreen = GAME_BOARD;
+        return;
+    }
+
+    // Nhập kí tự (chỉ nhận chữ, số, không nhận kí tự đặc biệt)
+    int key = GetCharPressed();
+    while (key > 0)
+    {
+        // Chỉ cho phép chữ cái (A-Z, a-z) và số (0-9)
+        if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z') || (key >= '0' && key <= '9'))
+        {
+            if (ui.saveNameInput.size() < 20) // Giới hạn 20 kí tự
+            {
+                ui.saveNameInput += (char)key;
+            }
+        }
+        ui.saveNameError = false;
+        key = GetCharPressed();
+    }
+}
+
+void handleNameInputScreen(MatchState &match, UIState &ui)
+{
+    // ESC: quay lại màn hình trước đó
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
+        ui.nameInputBuffer.clear();
+        ui.currentScreen = MAIN_MENU;
+        ui.mainMenuIndex = 0;
+        return;
+    }
+
+    // Backspace: xoá kí tự cuối
+    if (IsKeyPressed(KEY_BACKSPACE))
+    {
+        if (!ui.nameInputBuffer.empty())
+            ui.nameInputBuffer.pop_back();
+        return;
+    }
+
+    // Enter: xác nhận tên
+    if (isConfirm())
+    {
+        // Trim whitespace
+        std::string trimmed;
+        for (char c : ui.nameInputBuffer)
+        {
+            if (c != ' ' && c != '\t')
+                trimmed += c;
+        }
+
+        // Dùng tên mặc định nếu rỗng
+        if (trimmed.empty())
+        {
+            trimmed = ui.isEnteringPlayerXName ? "Player X" : "Player O";
+        }
+
+        if (ui.isEnteringPlayerXName)
+        {
+            ui.playerXName = trimmed;
+
+            if (ui.isPVE)
+            {
+                // PVE: Bot auto name, chuyển sang chọn nhân vật
+                ui.playerOName = "Bot";
+                ui.currentScreen = CHARACTER_SELECTION;
+                ui.isSelectingX = true;
+                ui.characterMenuIndex = 1;
+            }
+            else
+            {
+                // PVP: chuyển sang nhập tên O
+                ui.isEnteringPlayerXName = false;
+                ui.nameInputBuffer.clear();
+            }
+        }
+        else
+        {
+            // PVP: đã nhập xong tên O
+            ui.playerOName = trimmed;
+            ui.currentScreen = CHARACTER_SELECTION;
+            ui.isSelectingX = true;
+            ui.characterMenuIndex = 1;
+        }
+        return;
+    }
+
+    // Nhập kí tự
+    int key = GetCharPressed();
+    while (key > 0)
+    {
+        // Cho phép chữ, số, khoảng trắng, gạch ngang, dấu nháy
+        if ((key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z') ||
+            (key >= '0' && key <= '9') || key == ' ' || key == '-' || key == '\'')
+        {
+            if (ui.nameInputBuffer.size() < 20)
+                ui.nameInputBuffer += (char)key;
+        }
+        key = GetCharPressed();
+    }
+
+    (void)match;
+}
+
+void handleSettingsInput(UIState &ui)
+{
     const int SETTINGS_COUNT = 7;
 
     if (isDirUp())
@@ -798,7 +1407,8 @@ void handleSettingsInput(UIState& ui) {
 
     (void)SETTINGS_COUNT;
 }
-void handleBotDifficultyInput(UIState& ui) {
+void handleBotDifficultyInput(UIState &ui)
+{
     const int totalOptions = 3;
 
     if (isDirUp())
@@ -815,9 +1425,10 @@ void handleBotDifficultyInput(UIState& ui) {
     {
         ui.botDifficulty = static_cast<BotDifficulty>(ui.botDifficultyIndex);
 
-        ui.currentScreen = CHARACTER_SELECTION;
-        ui.isSelectingX = true;
-        ui.characterMenuIndex = 1;
+        // PVE: chuyển sang màn nhập tên trước khi chọn nhân vật
+        ui.currentScreen = NAME_INPUT;
+        ui.isEnteringPlayerXName = true;
+        ui.nameInputBuffer.clear();
     }
 
     if (IsKeyPressed(KEY_ESCAPE))
