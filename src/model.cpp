@@ -193,7 +193,6 @@ void executeAttack(Player& attacker, Player& defender, int turnCount)
         break;
 
     case SORCERER:
-        // Thêm 1 stack poison lên defender
         defender.sorcererStacks++;
         break;
     }

@@ -350,14 +350,43 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
         if (match.playerO.character == ASSASSIN)
             match.playerO.baseDamage += 5;
 
-        // Sorcerer poison: gây 5 DMG mỗi stack mỗi cặp lượt
+        // Sorcerer burn: đối thủ nhận 5 * stacks DMG mỗi cặp lượt
+        int screenW = GetScreenWidth();
+        int screenH = GetScreenHeight();
+
         if (match.playerX.sorcererStacks > 0)
         {
-            match.playerX.health = std::max(match.playerX.health - 5 * match.playerX.sorcererStacks, 0);
+            int burnDmg = 5 * match.playerX.sorcererStacks;
+            match.playerX.health = std::max(match.playerX.health - burnDmg, 0);
+
+            // Floating text (purple) trên panel bị burn (Player X - bên trái)
+            float dmgX = screenW * 0.15f;
+            float dmgY = screenH * 0.14f;
+            UIState::FloatingText ft;
+            ft.text = "-" + std::to_string(burnDmg) + " Burn";
+            ft.color = PURPLE;
+            ft.x = dmgX;
+            ft.y = dmgY;
+            ft.timer = 1.8f;
+            ft.maxTimer = 1.8f;
+            ui.floatingTexts.push_back(ft);
         }
         if (match.playerO.sorcererStacks > 0)
         {
-            match.playerO.health = std::max(match.playerO.health - 5 * match.playerO.sorcererStacks, 0);
+            int burnDmg = 5 * match.playerO.sorcererStacks;
+            match.playerO.health = std::max(match.playerO.health - burnDmg, 0);
+
+            // Floating text (purple) trên panel bị burn (Player O - bên phải)
+            float dmgX = screenW * 0.85f;
+            float dmgY = screenH * 0.14f;
+            UIState::FloatingText ft;
+            ft.text = "-" + std::to_string(burnDmg) + " Burn";
+            ft.color = PURPLE;
+            ft.x = dmgX;
+            ft.y = dmgY;
+            ft.timer = 1.8f;
+            ft.maxTimer = 1.8f;
+            ui.floatingTexts.push_back(ft);
         }
 
         RoundResult mr = checkMatchResult(match);
@@ -436,6 +465,34 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
             ft.timer = 1.8f;
             ft.maxTimer = 1.8f;
             ui.floatingTexts.push_back(ft);
+        }
+
+        // Bruiser reflect text (màu cam) — hiện trên panel bên attacker bị phản hồi
+        if (defender.character == BRUISER && damageDealt > 0)
+        {
+            int reflectDmg = (int)(damageDealt * 0.25f);
+            if (reflectDmg > 0)
+            {
+                float reflX, reflY;
+                if (rr == X_WINS) // attacker = X (bên trái), defender = O (Bruiser - bên phải)
+                {
+                    reflX = screenW * 0.15f;
+                    reflY = screenH * 0.19f; // Hơi lệch xuống dưới text hp/heal
+                }
+                else // attacker = O (bên phải), defender = X (Bruiser - bên trái)
+                {
+                    reflX = screenW * 0.85f;
+                    reflY = screenH * 0.19f;
+                }
+                UIState::FloatingText ft;
+                ft.text = "-" + std::to_string(reflectDmg) + " Reflect";
+                ft.color = ORANGE;
+                ft.x = reflX;
+                ft.y = reflY;
+                ft.timer = 1.8f;
+                ft.maxTimer = 1.8f;
+                ui.floatingTexts.push_back(ft);
+            }
         }
 
         // Kiểm tra xem trận đấu tổng đã có người thắng chưa
