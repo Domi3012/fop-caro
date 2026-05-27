@@ -16,7 +16,10 @@ namespace
         std::string name = player.name.empty() ? defaultName : player.name;
         out << name << "\n"
             << static_cast<int>(player.character) << " "
-            << player.health << "\n";
+            << player.health << " "
+            << player.maxHealth << " "
+            << player.baseDamage << " "
+            << player.sorcererStacks << "\n";
     }
 
     void saveRound(std::ofstream &out, const RoundState &round)
@@ -41,8 +44,21 @@ namespace
     {
         int charType;
         std::getline(in >> std::ws, player.name);
+        in >> charType >> player.health >> player.maxHealth >> player.baseDamage >> player.sorcererStacks;
+        player.character = static_cast<CharacterType>(charType);
+    }
+
+    // Load player từ format cũ (chỉ có charType + health)
+    void loadPlayerLegacy(std::ifstream &in, Player &player)
+    {
+        int charType;
+        std::getline(in >> std::ws, player.name);
         in >> charType >> player.health;
         player.character = static_cast<CharacterType>(charType);
+        // Khôi phục maxHealth và baseDamage từ character type
+        player.maxHealth = getBaseHealth(player.character);
+        player.baseDamage = getBaseDamage(player.character);
+        player.sorcererStacks = 0;
     }
 
     void loadRound(std::ifstream &in, RoundState &round)
@@ -195,8 +211,11 @@ bool loadGame(MatchState &match,
         int charType;
         in >> charType >> match.playerX.health;
         match.playerX.character = static_cast<CharacterType>(charType);
+        match.playerX.maxHealth = getBaseHealth(match.playerX.character);
+        match.playerX.baseDamage = getBaseDamage(match.playerX.character);
+        match.playerX.sorcererStacks = 0;
 
-        loadPlayer(in, match.playerO);
+        loadPlayerLegacy(in, match.playerO);
 
         loadRound(in, match.currentRound);
 

@@ -76,8 +76,8 @@ struct UIState
     int renderHeight = 1080;   // Chiều cao render hiện tại (px)
 
     // --- Hiệu ứng HP mượt ---
-    float displayHealthX = (float)MAX_HEALTH; // HP hiển thị (nội suy mượt) của X
-    float displayHealthO = (float)MAX_HEALTH; // HP hiển thị (nội suy mượt) của O
+    float displayHealthX = 0.0f; // HP hiển thị (nội suy mượt) của X
+    float displayHealthO = 0.0f; // HP hiển thị (nội suy mượt) của O
 
     // --- Floating damage/heal text ---
     struct FloatingText

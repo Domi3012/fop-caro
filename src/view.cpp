@@ -64,7 +64,7 @@ static void drawStatusPanel(const MatchState &match, UIState &ui);
 static void drawTurnBanner(const MatchState &match);
 static void drawCharacters(float shiftX);
 static void drawPauseOverlay(const UIState &ui);
-static void drawPlayerPanel(const char *name, float displayHealth, int actualHealth,
+static void drawPlayerPanel(const char *name, float displayHealth, int actualHealth, int maxHealth,
                             Color accent,
                             float x, float y, float barW, float barH,
                             float nameFontSize, float hpFontSize);
@@ -702,7 +702,7 @@ static void drawPlayerPanel(const char *name, float displayHealth, int actualHea
     float nameBlockH = nameSize.y; // chiều cao tên
     float gap1 = 12.0f;            // khoảng cách tên -> thanh HP
     float gap2 = 10.0f;            // khoảng cách thanh HP -> text HP
-    Vector2 hpTextSize = MeasureTextEx(font8bit, TextFormat("HP: %d/%d", actualHealth, MAX_HEALTH), hpFontSize, 0);
+    Vector2 hpTextSize = MeasureTextEx(font8bit, TextFormat("HP: %d/%d", actualHealth, maxHealth), hpFontSize, 0);
     float hpTextBlockH = hpTextSize.y;
 
     float contentH = nameBlockH + gap1 + barH + gap2 + hpTextBlockH;
@@ -783,9 +783,9 @@ static void drawStatusPanel(const MatchState &match, UIState &ui)
     const char *xName = match.playerX.name.empty() ? "Player X" : match.playerX.name.c_str();
     const char *oName = match.playerO.name.empty() ? "Player O" : match.playerO.name.c_str();
 
-    drawPlayerPanel(xName, ui.displayHealthX, match.playerX.health, RED,
+    drawPlayerPanel(xName, ui.displayHealthX, match.playerX.health, match.playerX.maxHealth, RED,
                     screenW * 0.05f, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
-    drawPlayerPanel(oName, ui.displayHealthO, match.playerO.health, BLUE,
+    drawPlayerPanel(oName, ui.displayHealthO, match.playerO.health, match.playerO.maxHealth, BLUE,
                     screenW * 0.95f - barW, screenH * 0.16f, barW, barH, nameFontSize, hpFontSize);
 
     drawTurnIndicator(match, screenW, screenH);

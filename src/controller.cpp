@@ -344,6 +344,13 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
 
     if (round.turnCount > 0 && round.turnCount % 2 == 0)
     {
+        // Assassin: +5 damage mỗi cặp lượt (x - o)
+        if (match.playerX.character == ASSASSIN)
+            match.playerX.baseDamage += 5;
+        if (match.playerO.character == ASSASSIN)
+            match.playerO.baseDamage += 5;
+
+        // Sorcerer poison: gây 5 DMG mỗi stack mỗi cặp lượt
         if (match.playerX.sorcererStacks > 0)
         {
             match.playerX.health = std::max(match.playerX.health - 5 * match.playerX.sorcererStacks, 0);
@@ -569,6 +576,7 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
             playerX.character = match.playerX.character;
             playerX.maxHealth = getBaseHealth(playerX.character);
             playerX.health = playerX.maxHealth;
+            playerX.baseDamage = getBaseDamage(playerX.character);
             playerX.sorcererStacks = 0;
 
             Player playerO;
@@ -576,14 +584,15 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
             playerO.character = match.playerO.character;
             playerO.maxHealth = getBaseHealth(playerO.character);
             playerO.health = playerO.maxHealth;
+            playerO.baseDamage = getBaseDamage(playerO.character);
             playerO.sorcererStacks = 0;
 
             initMatch(match, playerX, playerO);
             ui.moveHistory.clear(); // Xoá lịch sử cho game mới
             ui.undoStack.clear();   // Clear undo stack for new game
             ui.redoStack.clear();   // Clear redo stack for new game
-            ui.displayHealthX = (float)MAX_HEALTH;
-            ui.displayHealthO = (float)MAX_HEALTH;
+            ui.displayHealthX = (float)match.playerX.maxHealth;
+            ui.displayHealthO = (float)match.playerO.maxHealth;
             ui.floatingTexts.clear();
             startGameIntro(ui);
         }
