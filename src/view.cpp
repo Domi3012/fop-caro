@@ -443,18 +443,23 @@ void drawCharSelection(const UIState &ui)
     case 1:
         charName = "ASSASSIN";
         charColor = Fade(PURPLE, 0.8f);
-        charDesc = "Skill: DMG increases significantly as the round goes on";
+        charDesc = "Skill: +5 DMG per pair of turns (x - o)";
         break;
     case 2:
         charName = "BRUISER";
         charColor = Fade(ORANGE, 0.8f);
-        charDesc = "Skill: DMG is always a moderately high constant";
+        charDesc = "Skill: Reflect 25% of received damage";
         break;
     case 3:
-    default:
         charName = "VAMPIRE";
         charColor = Fade(DARKGREEN, 0.8f);
-        charDesc = "Skill: Heals a small, random amount of HP when attack";
+        charDesc = "Skill: Heal 30% of damage dealt";
+        break;
+    case 4:
+    default:
+        charName = "SORCERER";
+        charColor = Fade(SKYBLUE, 0.8f);
+        charDesc = "Skill: Applies poison stack on win. Deals 5 DMG per stack every 2 turns.";
         break;
     }
 
@@ -475,9 +480,9 @@ void drawCharSelection(const UIState &ui)
 
     // Indicators (● ● ○)
     float dotGap = 40.0f;
-    float dotsStartX = screenW / 2.0f - dotGap;
+    float dotsStartX = screenW / 2.0f - dotGap * 1.5f;
     float dotsY = panelY + panelH - screenH * 0.08f;
-    for (int i = 1; i <= 3; i++)
+    for (int i = 1; i <= 4; i++)
     {
         if (i == ui.characterMenuIndex)
             DrawCircle(dotsStartX + (i - 1) * dotGap, dotsY, 10.0f, buttonYellow);
@@ -684,7 +689,7 @@ static void drawTurnBanner(const MatchState &match)
                {turnBoxX + paddingX, turnBoxY + paddingY},
                fontSize, 0, RAYWHITE);
 }
-static void drawPlayerPanel(const char *name, float displayHealth, int actualHealth,
+static void drawPlayerPanel(const char *name, float displayHealth, int actualHealth, int maxHealth,
                             Color accent,
                             float x, float y, float barW, float barH,
                             float nameFontSize, float hpFontSize)
@@ -712,9 +717,8 @@ static void drawPlayerPanel(const char *name, float displayHealth, int actualHea
     DrawTextEx(font8bit, name, {x, y}, nameFontSize, 0, accent);
 
     // Thanh HP mượt (dùng displayHealth thay vì actualHealth)
-    float hpFill = barW * (displayHealth / (float)MAX_HEALTH);
-    if (hpFill < 0.0f)
-        hpFill = 0.0f;
+    float hpFill = barW * (displayHealth / (float)maxHealth);
+    if (hpFill < 0.0f) hpFill = 0.0f;
     float barY = y + nameBlockH + gap1;
     DrawRectangle((int)x, (int)barY, (int)barW, (int)barH, hpBg);
     DrawRectangle((int)x, (int)barY, (int)hpFill, (int)barH, accent);
@@ -722,7 +726,7 @@ static void drawPlayerPanel(const char *name, float displayHealth, int actualHea
 
     // Text HP (hiển thị số thực tế, không phải display)
     DrawTextEx(font8bit,
-               TextFormat("HP: %d/%d", actualHealth, MAX_HEALTH),
+               TextFormat("HP: %d/%d", actualHealth, maxHealth),
                {x, barY + barH + gap2}, hpFontSize, 0, RAYWHITE);
 }
 

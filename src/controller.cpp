@@ -342,6 +342,26 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
     // Add new move to undoStack
     ui.undoStack.push_back(mr);
 
+    if (round.turnCount > 0 && round.turnCount % 2 == 0)
+    {
+        if (match.playerX.sorcererStacks > 0)
+        {
+            match.playerX.health = std::max(match.playerX.health - 5 * match.playerX.sorcererStacks, 0);
+        }
+        if (match.playerO.sorcererStacks > 0)
+        {
+            match.playerO.health = std::max(match.playerO.health - 5 * match.playerO.sorcererStacks, 0);
+        }
+
+        RoundResult mr = checkMatchResult(match);
+        if (mr != ONGOING)
+        {
+            match.matchResult = mr;
+            ui.currentScreen = GAME_OVER;
+            return;
+        }
+    }
+
     RoundResult rr = checkRoundResult(round, x, y);
 
     if (rr == X_WINS || rr == O_WINS)
@@ -502,7 +522,7 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
 
     if (isDirRight())
     {
-        if (ui.characterMenuIndex < 3)
+        if (ui.characterMenuIndex < 4)
         {
             ui.characterMenuIndex++;
             playSFX(SFX_CLICK);
@@ -521,8 +541,11 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
         case 2:
             chosen = BRUISER;
             break;
-        default:
+        case 3:
             chosen = VAMPIRE;
+            break;
+        default:
+            chosen = SORCERER;
             break;
         }
 
@@ -544,12 +567,16 @@ void handleCharSelectionInput(MatchState &match, UIState &ui)
             Player playerX;
             playerX.name = ui.playerXName.empty() ? "Player X" : ui.playerXName;
             playerX.character = match.playerX.character;
-            playerX.health = MAX_HEALTH;
+            playerX.maxHealth = getBaseHealth(playerX.character);
+            playerX.health = playerX.maxHealth;
+            playerX.sorcererStacks = 0;
 
             Player playerO;
             playerO.name = ui.playerOName.empty() ? (ui.isPVE ? "Bot" : "Player O") : ui.playerOName;
             playerO.character = match.playerO.character;
-            playerO.health = MAX_HEALTH;
+            playerO.maxHealth = getBaseHealth(playerO.character);
+            playerO.health = playerO.maxHealth;
+            playerO.sorcererStacks = 0;
 
             initMatch(match, playerX, playerO);
             ui.moveHistory.clear(); // Xoá lịch sử cho game mới

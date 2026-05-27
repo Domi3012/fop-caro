@@ -33,7 +33,8 @@ enum CharacterType
 {
     ASSASSIN,
     BRUISER,
-    VAMPIRE
+    VAMPIRE,
+    SORCERER
 };
 enum RoundResult
 {
@@ -52,6 +53,8 @@ struct Player
     string name;
     CharacterType character;
     int health = MAX_HEALTH;
+    int maxHealth = MAX_HEALTH;
+    int sorcererStacks = 0;
 };
 
 struct RoundState
@@ -129,3 +132,5 @@ bool isValidNameChar(int key);
 
 // Removes leading and trailing whitespace from a string
 string trimWhitespace(const string& str);
+
+int getBaseHealth(CharacterType type);

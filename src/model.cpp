@@ -6,15 +6,27 @@
 // Hằng số nội bộ cho executeAttack
 // ============================================================
 
-static constexpr int ASSASSIN_EARLY_DAMAGE      = 35;
-static constexpr int ASSASSIN_MID_DAMAGE_BASE   = 60;
-static constexpr int ASSASSIN_MID_DAMAGE_BONUS  = 20;
+static constexpr int ASSASSIN_BASE_DAMAGE       = 120;
+static constexpr int ASSASSIN_DAMAGE_PER_TURN   = 5;
 
-static constexpr int BRUISER_DAMAGE             = 60;
+static constexpr int BRUISER_DAMAGE             = 70;
 
-static constexpr int VAMPIRE_DAMAGE             = 50;
-static constexpr int VAMPIRE_HEAL_BASE          = 15;
-static constexpr int VAMPIRE_HEAL_RANDOM        = 11; // rand() % VAMPIRE_HEAL_RANDOM
+static constexpr int VAMPIRE_DAMAGE             = 100;
+
+static constexpr int SORCERER_DAMAGE            = 50;
+
+int getBaseHealth(CharacterType type)
+{
+    switch (type)
+    {
+    case ASSASSIN: return 650;
+    case BRUISER:  return 1600;
+    case VAMPIRE:  return 800;
+    case SORCERER: return 750;
+    default:       return 100;
+    }
+}
+
 
 
 // ============================================================
@@ -28,8 +40,13 @@ void initMatch(MatchState& matchState,
     matchState.playerX = playerX;
     matchState.playerO = playerO;
 
-    matchState.playerX.health    = MAX_HEALTH;
-    matchState.playerO.health    = MAX_HEALTH;
+    matchState.playerX.maxHealth = getBaseHealth(matchState.playerX.character);
+    matchState.playerX.health    = matchState.playerX.maxHealth;
+    matchState.playerX.sorcererStacks = 0;
+
+    matchState.playerO.maxHealth = getBaseHealth(matchState.playerO.character);
+    matchState.playerO.health    = matchState.playerO.maxHealth;
+    matchState.playerO.sorcererStacks = 0;
     matchState.countRoundsPlayed = 0;
     matchState.matchResult       = ONGOING;
 
@@ -154,24 +171,10 @@ RoundResult checkRoundResult(RoundState& roundState, int lastMoveX, int lastMove
 void executeAttack(Player& attacker, Player& defender, int turnCount)
 {
     int damage     = 0;
-    int boardTotal = BOARD_SIZE * BOARD_SIZE;
-
-    // Mốc early/mid/late game theo tỉ lệ số ô
-    int earlyEnd = boardTotal / 5;
-    int midEnd   = (boardTotal * 3) / 5;
-
     switch (attacker.character)
     {
     case ASSASSIN:
-        if (turnCount > midEnd)
-            damage = defender.health;                          // Kết liễu (late game)
-        else if (turnCount > earlyEnd)
-            damage = ASSASSIN_MID_DAMAGE_BASE
-                   + (turnCount - earlyEnd)
-                   * ASSASSIN_MID_DAMAGE_BONUS
-                   / (midEnd - earlyEnd);                      // Scale tuyến tính (mid game)
-        else
-            damage = ASSASSIN_EARLY_DAMAGE;                    // Cố định (early game)
+        damage = ASSASSIN_BASE_DAMAGE + (turnCount / 2) * ASSASSIN_DAMAGE_PER_TURN;
         break;
 
     case BRUISER:
@@ -181,10 +184,22 @@ void executeAttack(Player& attacker, Player& defender, int turnCount)
     case VAMPIRE:
         damage = VAMPIRE_DAMAGE;
         {
-            int heal = VAMPIRE_HEAL_BASE + rand() % VAMPIRE_HEAL_RANDOM;
-            attacker.health = std::min(attacker.health + heal, MAX_HEALTH);
+            int heal = damage * 0.3f;
+            attacker.health = std::min(attacker.health + heal, attacker.maxHealth);
         }
         break;
+        
+    case SORCERER:
+        damage = SORCERER_DAMAGE;
+        defender.sorcererStacks++;
+        break;
+    }
+
+    // BRUISER reflect damage
+    if (defender.character == BRUISER)
+    {
+        int reflectDamage = damage * 0.25f;
+        attacker.health = std::max(attacker.health - reflectDamage, 0);
     }
 
     defender.health = std::max(defender.health - damage, 0);
