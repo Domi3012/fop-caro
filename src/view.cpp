@@ -72,6 +72,7 @@ static void drawPlayerPanel(const char *name, float displayHealth, int actualHea
 static void drawTurnIndicator(const MatchState &match, int screenW, int screenH);
 static void drawFloatingTexts(UIState &ui);
 static void drawWinningHighlight(const MatchState &match, const BoardLayout &layout);
+static void drawUndoRedoBar(const UIState &ui);
 
 // --- HAM RENDER TONG ---
 void renderGame(const MatchState &match, UIState &ui)
@@ -182,19 +183,23 @@ void unloadView()
 
 static BoardLayout getBoardLayout(int screenW, int screenH)
 {
-    // Chừa chỗ cho panel trái/phải + turn banner phía trên
+    // Cạnh trên của 2 box thông tin nhân vật (drawPlayerPanel dùng panelPadding = 16)
+    float panelTopY = screenH * 0.16f - 16.0f;
+
+    // Chừa chỗ cho panel trái/phải
     float reservedSide = screenW * 0.28f;
-    float reservedTop = screenH * 0.16f;
+    // Chừa phía dưới cho undo/redo bar + margin
     float reservedBottom = screenH * 0.08f;
 
     float maxBoardW = screenW - reservedSide * 2.0f;
-    float maxBoardH = screenH - reservedTop - reservedBottom;
+    float maxBoardH = screenH - panelTopY - reservedBottom;
 
     float boardPixelSize = std::min(maxBoardW, maxBoardH);
     float cellSize = boardPixelSize / BOARD_SIZE;
 
     float startX = (screenW - boardPixelSize) / 2.0f;
-    float startY = reservedTop + (maxBoardH - boardPixelSize) / 2.0f;
+    // Đặt cạnh trên bàn cờ = cạnh trên box nhân vật
+    float startY = panelTopY;
 
     return {boardPixelSize, cellSize, startX, startY};
 }
@@ -215,9 +220,24 @@ static void drawCharacters(const MatchState &match, float shiftX)
     float posX_X = screenW * 0.15f + shiftX - spriteW / 2.0f;
     float posX_O = screenW * 0.85f + shiftX - spriteW / 2.0f;
 
-    // Retrieve and update animations
-    CharacterSprite &csX = getCharacterSprite(match.playerX.character);
-    CharacterSprite &csO = getCharacterSprite(match.playerO.character);
+    // Per-player sprite copies: mỗi player có timer/frame riêng
+    // → tránh bug animation nhanh gấp đôi khi 2 player chọn cùng nhân vật.
+    static CharacterSprite csX;
+    static CharacterSprite csO;
+    static CharacterType lastTypeX = (CharacterType)-1;
+    static CharacterType lastTypeO = (CharacterType)-1;
+
+    // Re-init khi nhân vật thay đổi (new game / load game)
+    if (match.playerX.character != lastTypeX)
+    {
+        csX = getCharacterSpriteCopy(match.playerX.character);
+        lastTypeX = match.playerX.character;
+    }
+    if (match.playerO.character != lastTypeO)
+    {
+        csO = getCharacterSpriteCopy(match.playerO.character);
+        lastTypeO = match.playerO.character;
+    }
 
     // If game is active or intro is running, update the idle/active animations
     updateCharacterAnimation(csX, GetFrameTime());
@@ -674,6 +694,7 @@ void drawCaroGame(const MatchState &match, UIState &ui)
     drawCharacters(match, 0.0f);
     drawStatusPanel(match, ui);
     drawBoard(match, ui);
+    drawUndoRedoBar(ui);
     drawFloatingTexts(ui);
     if (ui.isPaused)
         drawPauseOverlay(ui);
@@ -757,6 +778,69 @@ static void drawWinningHighlight(const MatchState &match, const BoardLayout &lay
                              Fade(WHITE, blinkAlpha));
     }
 }
+
+// --- UNDO/REDO BAR ---
+static void drawUndoRedoBar(const UIState &ui)
+{
+    int screenW = GetScreenWidth();
+    int screenH = GetScreenHeight();
+
+    BoardLayout layout = getBoardLayout(screenW, screenH);
+
+    // Thanh nằm ngay bên dưới bàn cờ
+    float barY = layout.startY + layout.boardPixelSize + 10.0f;
+    float barH = screenH * 0.045f;
+    float barW = layout.boardPixelSize;
+    float barX = layout.startX;
+
+    // Background cho cả thanh
+    DrawRectangle((int)barX, (int)barY, (int)barW, (int)barH, Fade(BLACK, 0.50f));
+
+    // Chia đôi: nút trái = UNDO, nút phải = REDO
+    float gap = 6.0f;
+    float btnW = (barW - gap) / 2.0f;
+    float btnH = barH;
+
+    bool canUndo = !ui.undoStack.empty();
+    bool canRedo = !ui.redoStack.empty();
+
+    // --- Nút UNDO ---
+    {
+        float btnX = barX;
+        Color bgColor   = canUndo ? Fade(buttonYellow, 0.85f) : Fade(buttonDarkPurple, 0.40f);
+        Color borderClr = canUndo ? buttonYellow               : Fade(buttonYellow, 0.20f);
+        Color textClr   = canUndo ? buttonDarkPurple           : Fade(buttonYellow, 0.30f);
+
+        DrawRectangle((int)btnX, (int)barY, (int)btnW, (int)btnH, bgColor);
+        DrawRectangleLinesEx({btnX, barY, btnW, btnH}, 2, borderClr);
+
+        const char *label = "UNDO - Press Z";
+        float fontSize = btnH * 0.48f;
+        Vector2 sz = MeasureTextEx(font8bit, label, fontSize, 1);
+        float tx = btnX + (btnW - sz.x) / 2.0f;
+        float ty = barY + (btnH - sz.y) / 2.0f;
+        DrawTextEx(font8bit, label, {tx, ty}, fontSize, 1, textClr);
+    }
+
+    // --- Nút REDO ---
+    {
+        float btnX = barX + btnW + gap;
+        Color bgColor   = canRedo ? Fade(buttonYellow, 0.85f) : Fade(buttonDarkPurple, 0.40f);
+        Color borderClr = canRedo ? buttonYellow               : Fade(buttonYellow, 0.20f);
+        Color textClr   = canRedo ? buttonDarkPurple           : Fade(buttonYellow, 0.30f);
+
+        DrawRectangle((int)btnX, (int)barY, (int)btnW, (int)btnH, bgColor);
+        DrawRectangleLinesEx({btnX, barY, btnW, btnH}, 2, borderClr);
+
+        const char *label = "REDO - Press Y";
+        float fontSize = btnH * 0.48f;
+        Vector2 sz = MeasureTextEx(font8bit, label, fontSize, 1);
+        float tx = btnX + (btnW - sz.x) / 2.0f;
+        float ty = barY + (btnH - sz.y) / 2.0f;
+        DrawTextEx(font8bit, label, {tx, ty}, fontSize, 1, textClr);
+    }
+}
+
 static void drawTurnBanner(const MatchState &match)
 {
     int screenW = GetScreenWidth();
@@ -834,6 +918,8 @@ static void drawPlayerPanel(const char *name, float displayHealth, int actualHea
 
 static void drawTurnIndicator(const MatchState &match, int screenW, int screenH)
 {
+    BoardLayout layout = getBoardLayout(screenW, screenH);
+
     float turnFontSize = screenH * 0.04f;
     const char *xName = match.playerX.name.empty() ? "PLAYER X" : match.playerX.name.c_str();
     const char *oName = match.playerO.name.empty() ? "PLAYER O" : match.playerO.name.c_str();
@@ -846,7 +932,8 @@ static void drawTurnIndicator(const MatchState &match, int screenW, int screenH)
     float turnBoxW = turnSize.x + 60.0f;
     float turnBoxH = turnSize.y + 24.0f;
     float turnBoxX = screenW / 2.0f - turnBoxW / 2.0f;
-    float turnBoxY = screenH * 0.06f;
+    // Đặt ngay phía trên bàn cờ, cách 12px
+    float turnBoxY = layout.startY - turnBoxH - 12.0f;
 
     DrawRectangle((int)turnBoxX, (int)turnBoxY, (int)turnBoxW, (int)turnBoxH, Fade(BLACK, 0.60f));
     DrawRectangleLinesEx({turnBoxX, turnBoxY, turnBoxW, turnBoxH}, 3, turnColor);
