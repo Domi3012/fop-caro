@@ -760,8 +760,8 @@ void handleGameplayInput(MatchState &match, UIState &ui)
         return;
     }
 
-    // Redo: phím X
-    if (IsKeyPressed('X') || IsKeyPressed('x'))
+    // Redo: phím Y
+    if (IsKeyPressed('Y') || IsKeyPressed('y'))
     {
         redoMove(match, ui);
         return;
