@@ -95,3 +95,30 @@ void drawCharacterSprite(const CharacterSprite &cs,
                          float x, float y,
                          float scale = 1.0f,
                          bool flipH = false);
+
+// ============================================================
+// Attack Animation Data — Per-character, per-step
+// ============================================================
+
+// Một bước trong chuỗi attack animation (tổng 9 bước, 200ms/bước = 1800ms)
+struct AttackStep
+{
+    int attackerFrame;      // Frame index trên spritesheet attacker (0-indexed)
+    float offsetX;          // Offset X (tỉ lệ screenW, dương = về phía đối thủ)
+    float offsetY;          // Offset Y (tỉ lệ screenH, âm = lên trên)
+    int effectFrame;        // Frame index cho effect trên defender (-1 = không có)
+    bool defenderHit;       // true = defender bị rung+flash ở bước này
+};
+
+constexpr int ATTACK_STEP_COUNT = 9;          // Mọi nhân vật đều 9 bước
+constexpr float ATTACK_FRAME_TIME = 0.20f;    // 200ms/bước
+
+// Lấy bảng 9 AttackStep cho nhân vật theo CharacterType.
+const AttackStep* getAttackSteps(CharacterType type);
+
+// Vẽ một frame effect (khiên vỡ / nổ) từ spritesheet attack của nhân vật.
+// effectFrame là index trên spritesheet gốc (VD: bruiser frame 8-9, sorcerer frame 5-9).
+void drawEffectFrame(CharacterType attackerType,
+                     int effectFrame,
+                     float x, float y,
+                     float scale, bool flipH);

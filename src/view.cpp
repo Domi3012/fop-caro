@@ -112,6 +112,7 @@ void renderGame(const MatchState &match, UIState &ui)
         drawGameIntro(match, ui);
         break;
 
+    case ATTACK_ANIMATION:
     case GAME_BOARD:
         drawCaroGame(match, ui);
         break;
@@ -204,7 +205,7 @@ static BoardLayout getBoardLayout(int screenW, int screenH)
     return {boardPixelSize, cellSize, startX, startY};
 }
 
-static void drawCharacters(const MatchState &match, float shiftX)
+static void drawCharacters(const MatchState &match, const UIState &ui, float shiftX)
 {
     int screenW = GetScreenWidth();
     int screenH = GetScreenHeight();
@@ -217,17 +218,17 @@ static void drawCharacters(const MatchState &match, float shiftX)
     float scale = spriteH / 64.0f;
     float spriteW = 64.0f * scale;
 
-    float posX_X = screenW * 0.15f + shiftX - spriteW / 2.0f;
-    float posX_O = screenW * 0.85f + shiftX - spriteW / 2.0f;
+    float baseX_X = screenW * 0.15f + shiftX - spriteW / 2.0f;
+    float baseX_O = screenW * 0.85f + shiftX - spriteW / 2.0f;
+    float baseY = baseGroundY - spriteH;
 
-    // Per-player sprite copies: mỗi player có timer/frame riêng
-    // → tránh bug animation nhanh gấp đôi khi 2 player chọn cùng nhân vật.
+    // Per-player sprite copies
     static CharacterSprite csX;
     static CharacterSprite csO;
     static CharacterType lastTypeX = (CharacterType)-1;
     static CharacterType lastTypeO = (CharacterType)-1;
 
-    // Re-init khi nhân vật thay đổi (new game / load game)
+    // Re-init khi nhân vật thay đổi
     if (match.playerX.character != lastTypeX)
     {
         csX = getCharacterSpriteCopy(match.playerX.character);
@@ -239,15 +240,79 @@ static void drawCharacters(const MatchState &match, float shiftX)
         lastTypeO = match.playerO.character;
     }
 
-    // If game is active or intro is running, update the idle/active animations
-    updateCharacterAnimation(csX, GetFrameTime());
-    updateCharacterAnimation(csO, GetFrameTime());
+    // === ATTACK ANIMATION MODE ===
+    if (ui.attackAnimPlaying && ui.attackStep >= 0 && ui.attackStep < ATTACK_STEP_COUNT)
+    {
+        bool isXAttacking = (ui.attackingPlayer == X);
+        CharacterSprite &attackerCS = isXAttacking ? csX : csO;
+        CharacterSprite &defenderCS = isXAttacking ? csO : csX;
+        CharacterType attackerType  = isXAttacking ? match.playerX.character : match.playerO.character;
 
-    // Draw Player X (facing right)
-    drawCharacterSprite(csX, posX_X, baseGroundY - spriteH, scale, false);
+        float attackerBaseX = isXAttacking ? baseX_X : baseX_O;
+        float defenderBaseX = isXAttacking ? baseX_O : baseX_X;
+        bool  attackerFlip  = !isXAttacking;  // O luôn flip
+        bool  defenderFlip  = isXAttacking;   // Defender là người còn lại
 
-    // Draw Player O (facing left - flipped)
-    drawCharacterSprite(csO, posX_O, baseGroundY - spriteH, scale, true);
+        const AttackStep *steps = getAttackSteps(attackerType);
+        const AttackStep &step = steps[ui.attackStep];
+
+        // --- Vẽ attacker ---
+        // Offset resolution-independent
+        float ox = step.offsetX * screenW;
+        if (attackerFlip) ox = -ox;  // Đảo hướng cho Player O
+        float oy = step.offsetY * screenH;
+
+        SpriteAnimation &attackAnim = attackerCS.anims[ANIM_ATTACK];
+        if (attackAnim.loaded)
+        {
+            attackAnim.currentFrame = step.attackerFrame;
+            drawSprite(attackAnim, attackerBaseX + ox, baseY + oy, scale, attackerFlip);
+        }
+
+        // --- Vẽ defender (idle + hit reaction) ---
+        float defShakeX = 0.0f;
+        Color defTint = WHITE;
+        if (step.defenderHit)
+        {
+            // Rung nhanh: sin tần số cao, biên độ nhỏ
+            float time = (float)GetTime();
+            defShakeX = std::sin(time * 60.0f) * screenW * 0.008f;
+            defTint = {255, 255, 255, 200}; // Flash sáng
+        }
+
+        // Defender luôn ở idle animation
+        setAnimation(defenderCS, ANIM_IDLE);
+        updateCharacterAnimation(defenderCS, GetFrameTime());
+
+        SpriteAnimation &defAnim = defenderCS.anims[defenderCS.currentAnim];
+        if (defAnim.loaded)
+        {
+            float srcX = (float)(defAnim.currentFrame * SPRITE_FRAME_SIZE);
+            float srcW = (float)SPRITE_FRAME_SIZE;
+            float srcHt = (float)SPRITE_FRAME_SIZE;
+            if (defenderFlip) srcW = -srcW;
+            Rectangle src = { srcX, 0.0f, srcW, srcHt };
+            float destW = SPRITE_FRAME_SIZE * scale;
+            float destH = SPRITE_FRAME_SIZE * scale;
+            Rectangle dest = { defenderBaseX + defShakeX, baseY, destW, destH };
+            DrawTexturePro(defAnim.sheet, src, dest, {0, 0}, 0.0f, defTint);
+        }
+
+        // --- Vẽ effect frame trên defender (nếu có) ---
+        if (step.effectFrame >= 0)
+        {
+            drawEffectFrame(attackerType, step.effectFrame,
+                            defenderBaseX, baseY, scale, defenderFlip);
+        }
+    }
+    else
+    {
+        // === NORMAL MODE (idle) ===
+        updateCharacterAnimation(csX, GetFrameTime());
+        updateCharacterAnimation(csO, GetFrameTime());
+        drawCharacterSprite(csX, baseX_X, baseY, scale, false);
+        drawCharacterSprite(csO, baseX_O, baseY, scale, true);
+    }
 }
 
 // --- PARALLAX BACKGROUND ---
@@ -632,7 +697,7 @@ void drawGameIntro(const MatchState &match, const UIState &ui)
     float speedMultiplier = velocity / 30.0f;
 
     drawParallaxBackground(speedMultiplier);
-    drawCharacters(match, ui.introCamX);
+    drawCharacters(match, ui, ui.introCamX);
 }
 
 // Nhom ban co
@@ -691,7 +756,7 @@ static void drawPauseOverlay(const UIState &ui)
 void drawCaroGame(const MatchState &match, UIState &ui)
 {
     drawParallaxBackground(0.0f);
-    drawCharacters(match, 0.0f);
+    drawCharacters(match, ui, 0.0f);
     drawStatusPanel(match, ui);
     drawBoard(match, ui);
     drawUndoRedoBar(ui);
@@ -1031,7 +1096,7 @@ void drawGameOver(const MatchState &match, const UIState &ui)
     int screenH = GetScreenHeight();
 
     drawParallaxBackground(0.0f); // Lock background
-    drawCharacters(match, 0.0f);
+    drawCharacters(match, ui, 0.0f);
 
     const char *xName = match.playerX.name.empty() ? "X" : match.playerX.name.c_str();
     const char *oName = match.playerO.name.empty() ? "O" : match.playerO.name.c_str();

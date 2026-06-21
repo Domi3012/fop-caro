@@ -230,3 +230,106 @@ void drawCharacterSprite(const CharacterSprite &cs,
 {
     drawSprite(cs.anims[cs.currentAnim], x, y, scale, flipH);
 }
+
+// ============================================================
+// Attack Step Data — Resolution-independent
+// ============================================================
+// offsetX: tỉ lệ screenW. Khoảng cách X↔O ≈ 0.70 screenW.
+//   0.0  = vị trí gốc
+//   0.55 = sát bên đối thủ
+//   Khi flipH (Player O), dx tự đảo dấu trong view.
+// offsetY: tỉ lệ screenH. Âm = lên trên.
+
+// IMPOSTER (Assassin): đứng yên 4 frame, teleport 5 frame cuối
+static const AttackStep IMPOSTER_ATTACK[ATTACK_STEP_COUNT] = {
+//  frame  offsetX  offsetY  effect  hit
+    {0,    0.00f,   0.00f,   -1,     false},  // Bước 1: chuẩn bị
+    {1,    0.00f,   0.00f,   -1,     false},  // Bước 2: rung
+    {2,    0.00f,   0.00f,   -1,     false},  // Bước 3
+    {3,    0.00f,   0.00f,   -1,     false},  // Bước 4
+    {4,    0.70f,   0.00f,   -1,     false},  // Bước 5: teleport
+    {5,    0.70f,   0.00f,   -1,     true},   // Bước 6: đánh
+    {6,    0.70f,   0.00f,   -1,     true},   // Bước 7: đánh
+    {7,    0.70f,   0.00f,   -1,     true},   // Bước 8: đánh
+    {8,    0.70f,   0.00f,   -1,     true},   // Bước 9: đánh
+};
+
+// BRUISER: tụ lực 4 frame, lao tới 3 frame, quay về + khiên vỡ 2 frame
+static const AttackStep BRUISER_ATTACK[ATTACK_STEP_COUNT] = {
+    {0,    0.00f,   0.00f,   -1,     false},  // Tụ lực
+    {1,    0.00f,   0.00f,   -1,     false},  // Tụ lực
+    {2,    0.00f,   0.00f,   -1,     false},  // Tụ lực
+    {3,    0.00f,   0.00f,   -1,     false},  // Tụ lực
+    {4,    0.18f,   0.00f,   -1,     false},  // Lao tới
+    {5,    0.36f,   0.00f,   -1,     false},  // Lao tiếp
+    {6,    0.70f,   0.00f,   -1,     true},   // Đánh
+    {7,    0.00f,   0.00f,    8,     false},  // Quay về + khiên vỡ
+    {7,    0.00f,   0.00f,    9,     false},  // Giữ + khiên vỡ tiếp
+};
+
+// VAMPIRE: xoè cánh, lao liền mạch 9 frame
+static const AttackStep VAMPIRE_ATTACK[ATTACK_STEP_COUNT] = {
+    {0,    0.00f,   0.00f,   -1,     false},  // Xoè cánh
+    {1,    0.00f,   0.00f,   -1,     false},  // Xoè lớn
+    {2,    0.00f,   0.00f,   -1,     false},  // Thu cánh
+    {3,    0.15f,  -0.02f,   -1,     false},  // Bắt đầu lao
+    {4,    0.35f,  -0.03f,   -1,     false},  // Giữa đường
+    {5,    0.70f,   0.00f,   -1,     true},   // Đánh
+    {6,    0.70f,   0.00f,   -1,     true},   // Đánh tiếp
+    {7,    0.70f,   0.00f,   -1,     true},   // Đánh tiếp
+    {8,    0.70f,   0.00f,   -1,     false},  // Kết thúc
+};
+
+// SORCERER: tụ lực, bắn phép tại chỗ, effect nổ trên defender
+static const AttackStep SORCERER_ATTACK[ATTACK_STEP_COUNT] = {
+    {0,    0.00f,   0.00f,   -1,     false},  // Tụ lực
+    {1,    0.00f,   0.00f,   -1,     false},  // Tụ lực
+    {2,    0.00f,   0.00f,   -1,     false},  // Tụ lực
+    {3,    0.00f,   0.00f,   -1,     false},  // Tụ lực
+    {4,    0.00f,   0.00f,    5,     false},  // Đánh + nổ bắt đầu
+    {0,    0.00f,   0.00f,    6,     true},   // Về idle + nổ
+    {0,    0.00f,   0.00f,    7,     true},   // Về idle + nổ
+    {0,    0.00f,   0.00f,    8,     true},   // Về idle + nổ
+    {0,    0.00f,   0.00f,    9,     false},  // Về idle + nổ tan
+};
+
+// Bảng tra cứu theo CharacterType
+static const AttackStep* ALL_ATTACK_STEPS[4] = {
+    IMPOSTER_ATTACK,   // ASSASSIN  = 0
+    BRUISER_ATTACK,    // BRUISER   = 1
+    VAMPIRE_ATTACK,    // VAMPIRE   = 2
+    SORCERER_ATTACK,   // SORCERER  = 3
+};
+
+const AttackStep* getAttackSteps(CharacterType type)
+{
+    int idx = static_cast<int>(type);
+    if (idx < 0 || idx >= 4) idx = 0;
+    return ALL_ATTACK_STEPS[idx];
+}
+
+void drawEffectFrame(CharacterType attackerType,
+                     int effectFrame,
+                     float x, float y,
+                     float scale, bool flipH)
+{
+    int idx = static_cast<int>(attackerType);
+    if (idx < 0 || idx >= 4) return;
+
+    const SpriteAnimation &attackAnim = characterSprites[idx].anims[ANIM_ATTACK];
+    if (!attackAnim.loaded) return;
+    if (effectFrame < 0 || effectFrame >= attackAnim.frameCount) return;
+
+    float srcX = (float)(effectFrame * SPRITE_FRAME_SIZE);
+    float srcW = (float)SPRITE_FRAME_SIZE;
+    float srcH = (float)SPRITE_FRAME_SIZE;
+    if (flipH) srcW = -srcW;
+
+    Rectangle src = { srcX, 0.0f, srcW, srcH };
+    float destW = SPRITE_FRAME_SIZE * scale;
+    float destH = SPRITE_FRAME_SIZE * scale;
+    Rectangle dest = { x, y, destW, destH };
+
+    DrawTexturePro(attackAnim.sheet, src, dest, {0, 0}, 0.0f, WHITE);
+}
+

@@ -14,6 +14,7 @@ enum GameScreen
     CHARACTER_SELECTION,      // Mỗi người chọn nhân vật lần lượt (X trước, O sau)
     GAME_INTRO,               // Animation camera bay vào trước khi bắt đầu ván đấu
     GAME_BOARD,               // Màn hình chơi cờ chính
+    ATTACK_ANIMATION,         // Phát animation tấn công (1800ms) trước khi chuyển ROUND_OVER
     ROUND_OVER,               // Màn hình kết thúc một round (delay 2s rồi tự chuyển)
     GAME_OVER,                // Màn hình kết thúc toàn bộ trận đấu
     LOAD_GAME,                // Danh sách file save để tải
@@ -89,6 +90,13 @@ struct UIState
         float maxTimer; // thời gian tổng
     };
     std::vector<FloatingText> floatingTexts;
+
+    // --- Attack Animation ---
+    bool attackAnimPlaying = false;                // true khi đang phát animation attack
+    PlayerType attackingPlayer = NONE;             // Ai đang tấn công (X hoặc O)
+    int attackStep = 0;                            // Bước hiện tại (0..8)
+    float attackTimer = 0.0f;                      // Timer cho bước hiện tại
+    GameScreen postAttackScreen = ROUND_OVER;      // Màn hình chuyển đến sau animation
 };
 
 // Luồng điều phối chính
@@ -135,3 +143,5 @@ void handleLoadGameInput(MatchState &match, UIState &ui, std::vector<std::string
 void handleSaveGameInput(MatchState &match, UIState &ui);
 // Settings
 void handleSettingsInput(UIState &ui);
+// Attack animation
+void handleAttackAnimInput(MatchState &match, UIState &ui);
