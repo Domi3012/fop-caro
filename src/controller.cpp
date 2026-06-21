@@ -6,6 +6,7 @@
 #include <cctype>
 #include "bot_ai.h"
 #include "audio_manager.h"
+#include "sprite_manager.h"
 
 // Input helpers: gom W/S/A/D và mũi tên thành một lần kiểm tra
 inline bool isDirUp() { return IsKeyPressed('W') || IsKeyPressed('w') || IsKeyPressed(KEY_UP); }
@@ -495,25 +496,41 @@ void processMoveAndResult(MatchState &match, UIState &ui, int x, int y)
             }
         }
 
-        // Kiểm tra xem trận đấu tổng đã có người thắng chưa
+        // Xác định màn hình tiếp theo sau animation
         RoundResult mr = checkMatchResult(match);
         if (mr == X_WINS || mr == O_WINS)
         {
             match.matchResult = mr;
-            ui.currentScreen = GAME_OVER;
+            ui.postAttackScreen = GAME_OVER;
         }
         else
         {
-            ui.currentScreen = ROUND_OVER;
+            ui.postAttackScreen = ROUND_OVER;
         }
+
+        // Bắt đầu attack animation thay vì chuyển ngay
+        ui.attackAnimPlaying = true;
+        ui.attackingPlayer = (rr == X_WINS) ? X : O;
+        ui.attackStep = 0;
+        ui.attackTimer = 0.0f;
+        ui.currentScreen = ATTACK_ANIMATION;
+
+        if (ui.postAttackScreen == GAME_OVER)
+            playSFX(SFX_GAME_OVER);
+        else
+            playSFX(SFX_WIN);
     }
     else if (rr == DRAW)
     {
         round.result = DRAW;
         match.countRoundsPlayed++;
         ui.currentScreen = ROUND_OVER;
+        playSFX(SFX_WIN);
     }
-    // rr == ONGOING: không làm gì, game tiếp tục
+    else // rr == ONGOING
+    {
+        playSFX(SFX_PLACE);
+    }
 }
 
 // handleMainMenuInput:
@@ -760,8 +777,8 @@ void handleGameplayInput(MatchState &match, UIState &ui)
         return;
     }
 
-    // Redo: phím X
-    if (IsKeyPressed('X') || IsKeyPressed('x'))
+    // Redo: phím Y
+    if (IsKeyPressed('Y') || IsKeyPressed('y'))
     {
         redoMove(match, ui);
         return;
@@ -770,22 +787,7 @@ void handleGameplayInput(MatchState &match, UIState &ui)
     // Đặt quân
     if (isConfirm())
     {
-        GameScreen prevGameScreen = ui.currentScreen;
         processMoveAndResult(match, ui, ui.cursorY, ui.cursorX);
-
-        // Phat SFX dua theo ket qua sau khi dat quan
-        if (ui.currentScreen == ROUND_OVER)
-        {
-            playSFX(SFX_WIN);
-        }
-        else if (ui.currentScreen == GAME_OVER)
-        {
-            playSFX(SFX_GAME_OVER);
-        }
-        else if (prevGameScreen == GAME_BOARD && ui.currentScreen == GAME_BOARD)
-        {
-            playSFX(SFX_PLACE);
-        }
 
         if (ui.currentScreen != GAME_BOARD)
         {
@@ -1032,6 +1034,10 @@ void handleInput(MatchState &match, UIState &ui)
 
     case BOT_DIFFICULTY_SELECTION:
         handleBotDifficultyInput(ui);
+        break;
+
+    case ATTACK_ANIMATION:
+        handleAttackAnimInput(match, ui);
         break;
     }
 }
@@ -1435,5 +1441,30 @@ void handleBotDifficultyInput(UIState &ui)
     {
         ui.currentScreen = MODE_SELECTION;
         ui.modeMenuIndex = 1;
+    }
+}
+
+void handleAttackAnimInput(MatchState &match, UIState &ui)
+{
+    // Không nhận input người chơi trong lúc animation, chỉ đếm thời gian
+    float dt = GetFrameTime();
+    ui.attackTimer += dt;
+
+    if (ui.attackTimer >= ATTACK_FRAME_TIME)
+    {
+        ui.attackTimer -= ATTACK_FRAME_TIME;
+        ui.attackStep++;
+
+        if (ui.attackStep >= ATTACK_STEP_COUNT)
+        {
+            // Animation xong
+            ui.attackAnimPlaying = false;
+            ui.attackStep = 0;
+            ui.currentScreen = ui.postAttackScreen;
+
+            // Nếu chuyển sang ROUND_OVER, reset timer để chờ delay
+            if (ui.postAttackScreen == ROUND_OVER)
+                ui.roundOverTimer = 0.0f;
+        }
     }
 }
