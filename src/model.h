@@ -10,7 +10,7 @@ using std::vector;
 // I. Hằng số
 // ============================================================
 
-constexpr int BOARD_SIZE = 12;  // Kích thước bàn cờ (12 x 12)
+constexpr int BOARD_SIZE = 13;  // Kích thước bàn cờ (13 x 13)
 
 // Số quân liên tiếp tối thiểu để thắng
 constexpr int WIN_LENGTH = 5;
