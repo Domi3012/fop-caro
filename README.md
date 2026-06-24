@@ -11,7 +11,6 @@
 ## 📸 Screenshots
 
 <div align="center">
-  <p><i>(Add your gameplay screenshots into the `assets/images/screenshots/` folder and uncomment/replace the image paths below)</i></p>
   <table>
     <tr>
       <td><img src="assets/images/screenshots/menu.png" alt="Main Menu" width="400"/><br/><center><b>Main Menu</b></center></td>
