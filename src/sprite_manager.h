@@ -54,8 +54,12 @@ void initSpriteManager();
 // Gọi trước CloseWindow().
 void unloadSpriteManager();
 
-// Lấy sprite của nhân vật theo CharacterType.
+// Lấy sprite của nhân vật theo CharacterType (tham chiếu chung — dùng cho preview).
 CharacterSprite& getCharacterSprite(CharacterType type);
+
+// Lấy bản sao độc lập của sprite nhân vật (dùng cho mỗi player riêng biệt,
+// tránh chia sẻ timer/frame khi 2 người chọn cùng nhân vật).
+CharacterSprite getCharacterSpriteCopy(CharacterType type);
 
 // ============================================================
 // Điều khiển animation

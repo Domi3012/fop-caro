@@ -118,6 +118,24 @@ CharacterSprite& getCharacterSprite(CharacterType type)
     return characterSprites[idx];
 }
 
+CharacterSprite getCharacterSpriteCopy(CharacterType type)
+{
+    // Trả về bản sao (value copy) — texture handle được chia sẻ (không sao vì
+    // chỉ unload qua unloadSpriteManager), nhưng timer/frame/finished độc lập.
+    int idx = static_cast<int>(type);
+    if (idx < 0 || idx >= 4) idx = 0;
+    CharacterSprite copy = characterSprites[idx];
+    // Reset animation state cho bản sao
+    for (int i = 0; i < ANIM_COUNT; i++)
+    {
+        copy.anims[i].currentFrame = 0;
+        copy.anims[i].timer = 0.0f;
+        copy.anims[i].finished = false;
+    }
+    copy.currentAnim = ANIM_IDLE;
+    return copy;
+}
+
 // ============================================================
 // API: Điều khiển animation
 // ============================================================
